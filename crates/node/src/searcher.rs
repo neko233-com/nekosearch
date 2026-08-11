@@ -9,12 +9,12 @@
 
 use axum::{
     extract::{Query, State},
-    http::{header, HeaderMap, HeaderValue},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{Html, IntoResponse},
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
-use nekosearch_core::{indexer::Indexer, SearchQuery, SearchResult};
+use nekosearch_core::{indexer::Indexer, Doc, SearchQuery, SearchResult};
 use std::sync::Arc;
 
 /// 内嵌的搜索网页（编译期包含，单二进制即可对外提供 UI，无需额外部署静态文件）。
@@ -25,6 +25,7 @@ pub async fn serve(addr: &str, indexer: Arc<dyn Indexer>) -> anyhow::Result<()> 
     let app = Router::new()
         .route("/", get(home))
         .route("/search", get(search))
+        .route("/docs", post(add_doc))
         .route("/robots.txt", get(robots))
         .with_state(indexer);
 
@@ -55,6 +56,17 @@ async fn search(
         top_k: params.top_k.unwrap_or(10),
     };
     Json(indexer.search(&q).await.unwrap_or_default())
+}
+
+/// 写入文档：对外端口 7800 也能直接索引内容（与索引节点 7900 的 `/docs` 行为一致）。
+async fn add_doc(
+    State(indexer): State<Arc<dyn Indexer>>,
+    Json(doc): Json<Doc>,
+) -> StatusCode {
+    match indexer.add(doc).await {
+        Ok(()) => StatusCode::OK,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
 }
 
 /// 爬虫合规声明。允许全部抓取，遵循 robots 协议。

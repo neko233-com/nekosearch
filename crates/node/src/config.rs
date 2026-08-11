@@ -30,6 +30,10 @@ pub struct Config {
     pub max_depth: u32,
     /// 持久化索引数据目录（sled）。
     pub data_dir: String,
+    /// 启动时写入内置演示文档到索引，便于一键验证搜索（不依赖外网爬取）。
+    pub seed_demo: bool,
+    /// 多注册中心高可用：对端注册中心基址列表（http://host:port）。为空则为单机注册中心。
+    pub peers: Vec<String>,
 }
 
 impl Default for Config {
@@ -44,6 +48,8 @@ impl Default for Config {
             seeds: Vec::new(),
             max_depth: 2,
             data_dir: "./data".to_string(),
+            seed_demo: false,
+            peers: Vec::new(),
         }
     }
 }

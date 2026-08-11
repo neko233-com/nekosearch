@@ -12,6 +12,7 @@
 
 mod config;
 mod crawler;
+mod demo;
 mod indexer;
 mod sharded_indexer;
 mod persistent_indexer;
@@ -92,6 +93,14 @@ struct Cli {
     /// 持久化索引数据目录（sled）。
     #[arg(long, env = "DATA_DIR")]
     data_dir: Option<String>,
+
+    /// 启动时写入内置演示文档到索引，便于一键验证搜索（无需外网爬取）。
+    #[arg(long, env = "NEKO_SEED_DEMO")]
+    seed_demo: bool,
+
+    /// 多注册中心高可用：对端注册中心基址列表，逗号分隔（http://host:port）。
+    #[arg(long, env = "PEERS", value_delimiter = ',')]
+    peers: Option<Vec<String>>,
 }
 
 #[tokio::main]
@@ -131,6 +140,12 @@ async fn main() -> anyhow::Result<()> {
     if let Some(p) = cli.data_dir {
         cfg.data_dir = p;
     }
+    if cli.seed_demo {
+        cfg.seed_demo = true;
+    }
+    if let Some(p) = cli.peers {
+        cfg.peers = p;
+    }
 
     let role = config::parse_role(&cfg.role)?;
 
@@ -165,6 +180,21 @@ async fn main() -> anyhow::Result<()> {
     } else {
         Arc::new(sharded_indexer::ShardedIndexer::new(&cfg.indexer_remote)?)
     };
+
+    // 演示数据：开启后在后台写入索引，使搜索立即有内容可查（便于一键验证）。
+    if cfg.seed_demo {
+        let idx = indexer.clone();
+        let docs = demo::demo_docs();
+        let n = docs.len();
+        tokio::spawn(async move {
+            for d in docs {
+                if let Err(e) = idx.add(d).await {
+                    tracing::warn!("seed demo doc failed: {e}");
+                }
+            }
+            tracing::info!("seeded {n} demo documents into index (--seed-demo)");
+        });
+    }
 
     if let Some(reg) = &inmem_registry {
         let reg_clone = reg.clone();
