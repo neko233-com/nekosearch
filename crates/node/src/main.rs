@@ -14,14 +14,18 @@ mod config;
 mod crawler;
 mod demo;
 mod indexer;
-mod sharded_indexer;
 mod persistent_indexer;
 mod registry;
 mod registry_client;
 mod searcher;
+mod sharded_indexer;
 
 use clap::{Parser, ValueEnum};
-use nekosearch_core::{indexer::{InMemoryIndexer, Indexer}, registry::{InMemoryRegistry, Registry}, Role};
+use nekosearch_core::{
+    indexer::{InMemoryIndexer, Indexer},
+    registry::{InMemoryRegistry, Registry},
+    Role,
+};
 use std::sync::Arc;
 
 /// 命令行选定的角色。映射到底层 [`Role`] 协议枚举。
@@ -187,14 +191,18 @@ async fn main() -> anyhow::Result<()> {
     // 本节点若承担 indexer 角色，默认使用持久化（sled）实现，重启不丢索引；
     // 否则使用远端 HTTP 客户端。
     let sled_indexer = if run_indexer {
-        Some(persistent_indexer::SledIndexer::open_or_create(&cfg.data_dir)?)
+        Some(persistent_indexer::SledIndexer::open_or_create(
+            &cfg.data_dir,
+        )?)
     } else {
         None
     };
 
     let registry: Arc<dyn Registry> = match &inmem_registry {
         Some(r) => Arc::new(r.clone()),
-        None => Arc::new(registry_client::HttpRegistryClient::new(cfg.registry_remote.clone())),
+        None => Arc::new(registry_client::HttpRegistryClient::new(
+            cfg.registry_remote.clone(),
+        )),
     };
     let indexer: Arc<dyn Indexer> = if let Some(i) = &sled_indexer {
         Arc::new(i.clone())
@@ -264,7 +272,12 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if run_crawler {
-        let seeds: Vec<String> = cfg.seeds.iter().filter(|s| !s.is_empty()).cloned().collect();
+        let seeds: Vec<String> = cfg
+            .seeds
+            .iter()
+            .filter(|s| !s.is_empty())
+            .cloned()
+            .collect();
         let manager = Arc::new(crawler::manager::CrawlerManager::new(
             registry.clone(),
             indexer.clone(),

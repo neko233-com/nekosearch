@@ -6,9 +6,9 @@ services:
     image: nekosearch:latest
     container_name: nekosearch
     ports:
-      - "7700:7700"   # 注册中心
-      - "7800:7800"   # 检索服务 (对外查询)
-      - "7900:7900"   # 索引节点
+      - "7510:7510"   # 注册中心
+      - "7512:7512"   # 检索服务 (对外查询)
+      - "7511:7511"   # 索引节点
     volumes:
       # 索引持久化（sled 数据目录），容器重建不丢数据
       - nekosearch-data:/app/data

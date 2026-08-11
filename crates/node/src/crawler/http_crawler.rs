@@ -11,7 +11,9 @@ pub struct HttpCrawler {
 
 impl HttpCrawler {
     pub fn new() -> Self {
-        Self { client: Client::new() }
+        Self {
+            client: Client::new(),
+        }
     }
 }
 
@@ -112,10 +114,7 @@ pub fn extract_links(html: &str, base: &str) -> Vec<String> {
 }
 
 fn resolve(base: Option<&url::Url>, link: &str) -> Option<String> {
-    if link.starts_with("http://")
-        || link.starts_with("https://")
-        || link.starts_with("file://")
-    {
+    if link.starts_with("http://") || link.starts_with("https://") || link.starts_with("file://") {
         return Some(link.to_string());
     }
     if let Some(b) = base {

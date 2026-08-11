@@ -12,7 +12,7 @@ COPY --from=build /src/target/release/nekosearch /usr/local/bin/nekosearch
 COPY config.yaml.example /app/config.yaml
 # 持久化索引数据目录
 RUN mkdir -p /app/data
-EXPOSE 7700 7800 7900
+EXPOSE 7510 7511 7512
 ENTRYPOINT ["nekosearch"]
 # 默认单机全角色
 CMD ["--role", "all"]

@@ -6,8 +6,7 @@
 
 use async_trait::async_trait;
 use nekosearch_core::{
-    registry::Registry,
-    CrawlTask, IdRequest, NodeInfo, RegisterRequest, Result, Role,
+    registry::Registry, CrawlTask, IdRequest, NodeInfo, RegisterRequest, Result, Role,
 };
 use reqwest::Client;
 

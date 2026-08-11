@@ -11,7 +11,7 @@ if [ ! -x "$BIN" ]; then
   cargo build --release
 fi
 
-PORT=7800
+PORT=7512
 echo "[verify] starting nekosearch --role all --seed-demo on :$PORT ..."
 "$BIN" --role all --seed-demo > /tmp/nekosearch-verify.log 2>&1 &
 PID=$!

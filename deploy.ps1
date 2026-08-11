@@ -13,13 +13,13 @@ if ($docker) {
     }
     Write-Host ""
     Write-Host "完成！搜索引擎已启动："
-    Write-Host "  检索接口 : http://localhost:7800/search?q=你的关键词"
-    Write-Host "  注册中心 : http://localhost:7700/nodes"
+    Write-Host "  检索接口 : http://localhost:7512/search?q=你的关键词"
+    Write-Host "  注册中心 : http://localhost:7510/nodes"
     Write-Host "  停止     : docker compose down"
 }
 elseif (Get-Command cargo -ErrorAction SilentlyContinue) {
     Write-Host "[deploy] 未检测到 docker，使用 cargo 直接运行（需已安装 Rust）..."
-    Write-Host "  检索接口 : http://localhost:7800/search?q=你的关键词"
+    Write-Host "  检索接口 : http://localhost:7512/search?q=你的关键词"
     cargo run --release
 }
 else {

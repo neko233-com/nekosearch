@@ -19,7 +19,7 @@ pub enum Role {
 pub struct NodeInfo {
     pub id: String,
     pub role: Role,
-    /// 该节点对外暴露的基址，例如 `http://10.0.0.5:7900`。
+    /// 该节点对外暴露的基址，例如 `http://10.0.0.5:7511`。
     pub addr: String,
     /// 最近一次心跳时间（Unix 毫秒），用于剔除失联节点。
     pub last_heartbeat: i64,

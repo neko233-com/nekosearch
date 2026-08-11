@@ -17,9 +17,9 @@ use nekosearch_core::{
 use std::collections::HashMap;
 use std::time::Duration;
 
-/// 启动注册中心 HTTP 服务。
-pub async fn serve(addr: &str, reg: InMemoryRegistry) -> anyhow::Result<()> {
-    let app = Router::new()
+/// 构建注册中心路由（抽出以便测试在临时端口起服务）。
+pub(crate) fn router(reg: InMemoryRegistry) -> Router {
+    Router::new()
         .route("/ping", get(ping))
         .route("/register", post(register))
         .route("/heartbeat", post(heartbeat))
@@ -27,8 +27,12 @@ pub async fn serve(addr: &str, reg: InMemoryRegistry) -> anyhow::Result<()> {
         .route("/nodes", get(list_nodes))
         .route("/tasks", post(submit_task))
         .route("/tasks/claim", post(claim_task))
-        .with_state(reg);
+        .with_state(reg)
+}
 
+/// 启动注册中心 HTTP 服务。
+pub async fn serve(addr: &str, reg: InMemoryRegistry) -> anyhow::Result<()> {
+    let app = router(reg);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("registry http listening on {addr}");
     axum::serve(listener, app).await?;
@@ -104,10 +108,7 @@ async fn register(
     }
 }
 
-async fn heartbeat(
-    State(reg): State<InMemoryRegistry>,
-    Json(req): Json<IdRequest>,
-) -> Response {
+async fn heartbeat(State(reg): State<InMemoryRegistry>, Json(req): Json<IdRequest>) -> Response {
     if let Some(r) = leader_guard(&reg, "heartbeat").await {
         return r;
     }
@@ -117,10 +118,7 @@ async fn heartbeat(
     }
 }
 
-async fn deregister(
-    State(reg): State<InMemoryRegistry>,
-    Json(req): Json<IdRequest>,
-) -> Response {
+async fn deregister(State(reg): State<InMemoryRegistry>, Json(req): Json<IdRequest>) -> Response {
     if let Some(r) = leader_guard(&reg, "deregister").await {
         return r;
     }
@@ -167,4 +165,126 @@ async fn claim_task(
         return r;
     }
     Json(reg.claim_task(&req.crawler_id).await.unwrap_or(None)).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nekosearch_core::registry::InMemoryRegistry;
+    use nekosearch_core::{NodeInfo, RegisterRequest, Role};
+    use tokio::net::TcpListener;
+
+    #[derive(serde::Deserialize)]
+    struct Ping {
+        id: String,
+        leader: String,
+    }
+
+    #[tokio::test]
+    async fn ping_reports_self_id_and_leader() {
+        let reg = InMemoryRegistry::new_with_ha("http://127.0.0.1:7510".into(), Vec::new());
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let _h = tokio::spawn(async move {
+            axum::serve(listener, router(reg)).await.unwrap();
+        });
+        let base = format!("http://{addr}");
+        let ping: Ping = reqwest::Client::new()
+            .get(format!("{base}/ping"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(ping.id, "http://127.0.0.1:7510");
+        assert_eq!(ping.leader, "http://127.0.0.1:7510");
+    }
+
+    #[tokio::test]
+    async fn register_then_listed() {
+        let reg = InMemoryRegistry::new_with_ha("http://127.0.0.1:7510".into(), Vec::new());
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let _h = tokio::spawn(async move {
+            axum::serve(listener, router(reg)).await.unwrap();
+        });
+        let base = format!("http://{addr}");
+        let client = reqwest::Client::new();
+        let st = client
+            .post(format!("{base}/register"))
+            .json(&RegisterRequest {
+                id: "c1".into(),
+                role: Role::Crawler,
+                addr: "http://127.0.0.1:9999".into(),
+            })
+            .send()
+            .await
+            .unwrap()
+            .status();
+        assert_eq!(st, reqwest::StatusCode::OK);
+        let nodes: Vec<NodeInfo> = client
+            .get(format!("{base}/nodes"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(nodes.iter().any(|n| n.id == "c1"), "注册后 /nodes 应含 c1");
+    }
+
+    // 多注册中心 HA：非 leader 把写请求重定向到 leader（单写多备）。
+    #[tokio::test]
+    async fn non_leader_redirects_writes_to_leader() {
+        // 本节点 id=7511，已知对端 7510（字典序更小 => 7510 为 leader）。
+        let reg = InMemoryRegistry::new_with_ha(
+            "http://127.0.0.1:7511".into(),
+            vec!["http://127.0.0.1:7510".into()],
+        );
+        reg.observe_peer("http://127.0.0.1:7510", "http://127.0.0.1:7510")
+            .await;
+        reg.recompute_leader().await;
+        assert!(
+            !reg.is_leader().await,
+            "7511 在已知 7510 存在时不应是 leader"
+        );
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let _h = tokio::spawn(async move {
+            axum::serve(listener, router(reg)).await.unwrap();
+        });
+        let base = format!("http://{addr}");
+        // 不跟随重定向，直接检查 307/308 与 Location。
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap();
+        let resp = client
+            .post(format!("{base}/register"))
+            .json(&RegisterRequest {
+                id: "x".into(),
+                role: Role::Registry,
+                addr: "http://127.0.0.1:7513".into(),
+            })
+            .send()
+            .await
+            .unwrap();
+        assert!(
+            resp.status().is_redirection(),
+            "非 leader 写请求应返回重定向，实际 {}",
+            resp.status()
+        );
+        let loc = resp
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .expect("应有 Location 头")
+            .to_str()
+            .unwrap();
+        assert!(
+            loc.contains("127.0.0.1:7510"),
+            "重定向应指向 leader 7510，实际 {loc}"
+        );
+    }
 }

@@ -4,18 +4,18 @@
 # 节点角色：all(默认, 单机全角色) / registry / crawler / indexer / searcher
 role: all
 
-# 本节点各服务监听地址
-registry_addr: "0.0.0.0:7700"
-indexer_addr: "0.0.0.0:7900"
-searcher_addr: "0.0.0.0:7800"
+# 本节点各服务监听地址（默认端口区间 7510~7520）
+registry_addr: "0.0.0.0:7510"
+indexer_addr: "0.0.0.0:7511"
+searcher_addr: "0.0.0.0:7512"
 
 # 集群模式下连接远端注册中心的基址
-registry_remote: "http://127.0.0.1:7700"
+registry_remote: "http://127.0.0.1:7510"
 
 # 集群模式下连接远端索引节点的基址，支持分片与多副本：
 #   分片之间用逗号分隔，同一分片的多个副本用竖线分隔。
-#   例："http://s0a:7900|http://s0b:7900,http://s1a:7900"
-indexer_remote: "http://127.0.0.1:7900"
+#   例："http://s0a:7511|http://s0b:7511,http://s1a:7511"
+indexer_remote: "http://127.0.0.1:7511"
 
 # 爬虫种子 URL（列表形式，可多个）
 seeds:
@@ -33,6 +33,6 @@ data_dir: "./data"
 seed_demo: false
 
 # 多注册中心高可用（Phase 5）：对端注册中心基址列表，逗号分隔。
-# 例："http://127.0.0.1:7701,http://127.0.0.1:7702"
+# 例："http://127.0.0.1:7513,http://127.0.0.1:7514"
 # 为空表示单机注册中心（无 HA）。各注册中心通过心跳选主，非 leader 把写请求 307 转发到 leader。
 peers: []

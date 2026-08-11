@@ -10,7 +10,7 @@ if (-not (Test-Path $bin)) {
   cargo build --release
 }
 
-$port = 7800
+$port = 7512
 Write-Host "[verify] starting nekosearch --role all --seed-demo on :$port ..."
 $log = Join-Path $env:TEMP "neko-verify.log"
 $proc = Start-Process -FilePath $bin -ArgumentList "--role", "all", "--seed-demo" `

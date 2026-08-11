@@ -19,15 +19,15 @@
 起来后检索：
 
 ```bash
-curl "http://localhost:7800/search?q=rust&top_k=10"
+curl "http://localhost:7512/search?q=rust&top_k=10"
 ```
 
 > **单机开箱即搜**：`--role all` 且未配置任何爬取种子时（默认情况），启动会自动写入一组**各编程语言官方网站**的内置演示数据（Rust / Go / Python / JS / TS / Java / C++ / Kotlin / Swift / Ruby / PHP / Node.js …），无需外网即可直接搜索：
 >
 > ```bash
 > cargo run -- --role all
-> curl "http://localhost:7800/search?q=rust&top_k=5"      # 返回 rust-lang.org
-> curl "http://localhost:7800/search?q=python&top_k=5"    # 返回 python.org
+> curl "http://localhost:7512/search?q=rust&top_k=5"      # 返回 rust-lang.org
+> curl "http://localhost:7512/search?q=python&top_k=5"    # 返回 python.org
 > ```
 >
 > 想显式控制，可加 `--seed-demo`（强制写入）或配置 `seeds`（去爬真实网页，不再注入演示数据）。
@@ -37,10 +37,10 @@ curl "http://localhost:7800/search?q=rust&top_k=10"
 >
 > 验证脚本会断言 `rust→rust-lang.org`、`go→go.dev`、`python→python.org`、`java→java.com`、`c++→cppreference.com`，并校验 `/suggest` 自动补全。
 
-也可直接往对外端口写入内容（索引节点 7900 的 `/docs` 行为一致）：
+也可直接往对外端口写入内容（索引节点 7511 的 `/docs` 行为一致）：
 
 ```bash
-curl -X POST "http://localhost:7800/docs" \
+curl -X POST "http://localhost:7512/docs" \
   -H 'content-type: application/json' \
   -d '{"id":"doc1","url":"https://example.com","title":"示例标题","body":"示例正文，包含要被检索的关键词"}'
 ```
@@ -48,23 +48,23 @@ curl -X POST "http://localhost:7800/docs" \
 查询词自动补全（输入时下拉候选）：
 
 ```bash
-curl "http://localhost:7800/suggest?q=ne&limit=8"
+curl "http://localhost:7512/suggest?q=ne&limit=8"
 ```
 
 查看注册中心里的节点：
 
 ```bash
-curl "http://localhost:7700/nodes"
+curl "http://localhost:7510/nodes"
 ```
 
 ### 网页界面
 起好后直接用浏览器打开检索服务的地址即可使用搜索页：
 
 ```
-http://localhost:7800/
+http://localhost:7512/
 ```
 
-首页是带 `@neko233` 品牌与 GitHub 入口的暗色开发者风格搜索页，下方有一排编程语言快捷搜索（Rust / Go / Python …）。输入关键词回车后进入结果页（标题链接 + 绿色 URL + 摘要查询词高亮），纯前端调用 `/search` JSON 接口渲染，UI 随二进制内嵌、无需额外部署静态文件。对外提供搜索时，把这一个端口（默认 7800）用反向代理暴露出去即可。
+首页是带 `@neko233` 品牌与 GitHub 入口的暗色开发者风格搜索页，下方有一排编程语言快捷搜索（Rust / Go / Python …）。输入关键词回车后进入结果页（标题链接 + 绿色 URL + 摘要查询词高亮），纯前端调用 `/search` JSON 接口渲染，UI 随二进制内嵌、无需额外部署静态文件。对外提供搜索时，把这一个端口（默认 7512）用反向代理暴露出去即可。
 
 ## 手动方式
 
@@ -81,9 +81,9 @@ cargo run -- --role all --seeds https://www.rust-lang.org/ --max-depth 2
 ### 集群模式（拆角色，水平扩容爬虫）
 开多个终端，分别跑：
 ```bash
-nekosearch --role registry                         # 注册中心 :7700
-nekosearch --role indexer                          # 索引节点 :7900
-nekosearch --role searcher                         # 检索服务 :7800
+nekosearch --role registry                         # 注册中心 :7510
+nekosearch --role indexer                          # 索引节点 :7511
+nekosearch --role searcher                         # 检索服务 :7512
 nekosearch --role crawler --seeds https://example.com/   # 爬虫，可开 N 个
 ```
 新增 `crawler` 进程即可直接提升抓取吞吐——注册中心会自动发现并分配任务。
@@ -97,13 +97,13 @@ nekosearch --role crawler --seeds https://example.com/   # 爬虫，可开 N 个
 
 ```bash
 # 注册中心 A（leader 候选）
-nekosearch --role registry --registry-addr 0.0.0.0:7700 \
-  --peers http://127.0.0.1:7701
+nekosearch --role registry --registry-addr 0.0.0.0:7510 \
+  --peers http://127.0.0.1:7513
 # 注册中心 B
-nekosearch --role registry --registry-addr 0.0.0.0:7701 \
-  --peers http://127.0.0.1:7700
+nekosearch --role registry --registry-addr 0.0.0.0:7513 \
+  --peers http://127.0.0.1:7510
 # 其它角色指向两个注册中心，任一宕机自动切换
-nekosearch --role crawler --registry-remote "http://127.0.0.1:7700,http://127.0.0.1:7701" --seeds https://example.com/
+nekosearch --role crawler --registry-remote "http://127.0.0.1:7510,http://127.0.0.1:7513" --seeds https://example.com/
 ```
 
 ## 配置项（YAML / CLI / 环境变量）

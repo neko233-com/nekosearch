@@ -167,11 +167,7 @@ impl Indexer for SledIndexer {
     async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>> {
         let n = self.doc_count().max(1) as usize;
         let total = self.total_len();
-        let avgdl = if n > 0 {
-            total as f64 / n as f64
-        } else {
-            0.0
-        };
+        let avgdl = if n > 0 { total as f64 / n as f64 } else { 0.0 };
         let mut scores: HashMap<String, f32> = HashMap::new();
 
         for term in tokenize(&query.q) {
@@ -196,7 +192,11 @@ impl Indexer for SledIndexer {
             })
             .collect();
 
-        out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        out.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         out.truncate(query.top_k.max(1));
         Ok(out)
     }
@@ -222,5 +222,57 @@ impl Indexer for SledIndexer {
             .take(limit.max(1))
             .map(|(t, _)| t)
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nekosearch_core::{Doc, SearchQuery};
+
+    fn unique_tmp() -> String {
+        let n = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir()
+            .join(format!("nekosearch-sled-test-{n}"))
+            .to_string_lossy()
+            .to_string()
+    }
+
+    #[tokio::test]
+    async fn sled_add_search_and_persist_across_reopen() {
+        let dir = unique_tmp();
+        let idx = SledIndexer::open_or_create(&dir).unwrap();
+        idx.add(Doc {
+            id: "s".into(),
+            url: "https://rust-lang.org".into(),
+            title: "Rust".into(),
+            body: "rust programming language".into(),
+        })
+        .await
+        .unwrap();
+        let r = idx
+            .search(&SearchQuery {
+                q: "rust".into(),
+                top_k: 5,
+            })
+            .await
+            .unwrap();
+        assert!(r.iter().any(|x| x.doc.id == "s"), "写入后应可检索");
+
+        // 关闭后重新打开，索引应仍在（持久化）。
+        drop(idx);
+        let idx2 = SledIndexer::open_or_create(&dir).unwrap();
+        let r2 = idx2
+            .search(&SearchQuery {
+                q: "rust".into(),
+                top_k: 5,
+            })
+            .await
+            .unwrap();
+        assert!(r2.iter().any(|x| x.doc.id == "s"), "重启后索引应仍在");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

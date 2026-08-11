@@ -40,11 +40,12 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             role: "all".to_string(),
-            registry_addr: "0.0.0.0:7700".to_string(),
-            indexer_addr: "0.0.0.0:7900".to_string(),
-            searcher_addr: "0.0.0.0:7800".to_string(),
-            registry_remote: "http://127.0.0.1:7700".to_string(),
-            indexer_remote: "http://127.0.0.1:7900".to_string(),
+            // 默认端口区间 7510~7520：registry=7510 / indexer=7511 / searcher=7512。
+            registry_addr: "0.0.0.0:7510".to_string(),
+            indexer_addr: "0.0.0.0:7511".to_string(),
+            searcher_addr: "0.0.0.0:7512".to_string(),
+            registry_remote: "http://127.0.0.1:7510".to_string(),
+            indexer_remote: "http://127.0.0.1:7511".to_string(),
             seeds: Vec::new(),
             max_depth: 2,
             data_dir: "./data".to_string(),
@@ -61,8 +62,8 @@ impl Config {
         if !p.exists() {
             return Ok(Self::default());
         }
-        let raw = std::fs::read_to_string(p)
-            .with_context(|| format!("读取配置文件失败: {path}"))?;
+        let raw =
+            std::fs::read_to_string(p).with_context(|| format!("读取配置文件失败: {path}"))?;
         let text = raw.trim();
         if text.is_empty() {
             return Ok(Self::default());
@@ -81,8 +82,21 @@ pub fn parse_role(s: &str) -> anyhow::Result<Role> {
         "crawler" => Ok(Role::Crawler),
         "indexer" => Ok(Role::Indexer),
         "searcher" => Ok(Role::Searcher),
-        other => anyhow::bail!(
-            "未知角色: {other}（应为 all/registry/crawler/indexer/searcher）"
-        ),
+        other => anyhow::bail!("未知角色: {other}（应为 all/registry/crawler/indexer/searcher）"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_ports_in_7510_7520_range() {
+        let c = Config::default();
+        assert_eq!(c.registry_addr, "0.0.0.0:7510");
+        assert_eq!(c.indexer_addr, "0.0.0.0:7511");
+        assert_eq!(c.searcher_addr, "0.0.0.0:7512");
+        assert_eq!(c.registry_remote, "http://127.0.0.1:7510");
+        assert_eq!(c.indexer_remote, "http://127.0.0.1:7511");
     }
 }

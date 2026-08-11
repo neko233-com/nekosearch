@@ -30,11 +30,11 @@
 ## 3. 角色与数据流
 | 角色 | 职责 | 默认端口 |
 |------|------|----------|
-| registry | 节点注册/心跳/注销、抓取任务队列 | 7700 |
+| registry | 节点注册/心跳/注销、抓取任务队列 | 7510 |
 | crawler  | 向注册中心领任务，执行抓取，写索引，回灌外链 | — |
-| indexer  | 维护倒排索引，提供写入/查询 | 7900 |
-| searcher | 对外检索 API（GET /search）+ 网页 UI（GET /） | 7800 |
-| all      | 上述全部（单机默认） | 7700/7800/7900 |
+| indexer  | 维护倒排索引，提供写入/查询 | 7511 |
+| searcher | 对外检索 API（GET /search）+ 网页 UI（GET /） | 7512 |
+| all      | 上述全部（单机默认） | 7510/7511/7512 |
 
 数据流：种子 URL → 注册中心入队 → 爬虫领取 → 抓取 → 写索引 → 外链回灌为新任务（BFS）→ 检索服务查询索引。
 
@@ -66,14 +66,14 @@
 - `./deploy.sh`（Linux/macOS）/ `.\deploy.ps1`（Windows）：检测到 docker 则 `docker compose up -d --build`，否则 `cargo run --release`（单机 all）。
 - `docker-compose.yml`：单服务、三端口映射、`restart: unless-stopped`，挂载 `nekosearch-data` 卷持久化索引。
 - `config.yaml.example`：所有可配项（角色、地址、种子、深度、data_dir），YAML 格式，经 `config.yaml` 加载。
-- 起好后：`curl "http://localhost:7800/search?q=关键词"` 即可检索。
+- 起好后：`curl "http://localhost:7512/search?q=关键词"` 即可检索。
 
 ## 8. 里程碑 / 路线图
 - [x] **阶段 0（当前骨架）**：Cargo workspace、注册中心 trait+内存实现+HTTP、索引 trait+内存实现+HTTP、检索 API、爬虫执行器 trait + http/fs 示例、CLI 多角色、傻瓜式部署、AGENTS/PLAN。
 - [x] **阶段 1**：持久化索引（sled 嵌入式 KV，零外部依赖），进程重启不丢数据；并接入 YAML 配置、新增 `deploy.ps1` 一键安装。
 - [x] **阶段 2**：中文分词（jieba，纯 Rust 内置词典）接入 `tokenize`，评分升级为 BM25（k1=1.5/b=0.75，跟踪文档长度）。
 - [x] **阶段 3**：索引分片与多副本——新增 `ShardedIndexer`，按 `doc.id` 稳定哈希分片、分片内多副本写入、检索跨分片合并；`indexer_remote` 支持 `分片A|副本B,分片C` 格式。注册中心仍统一管理节点生命周期。
-- [x] **阶段 4**：检索前端 UI（暗色开发者风格网页，首页 @neko233 品牌 + GitHub 地址 + 渐变字标，纯前端调用 `/search` JSON 渲染，查询词高亮、XSS 转义、内嵌单二进制无需静态文件）、`/robots.txt` 合规声明；**查询词自动补全 suggest**（/suggest + 搜索框防抖下拉）；**打通搜索内容**：`--seed-demo` 写入内置演示文档即可一键验证搜索，检索端口 7800 新增 `POST /docs` 可直接对外写入内容；提供 `scripts/verify.sh` / `verify.ps1` 一键验证。
+- [x] **阶段 4**：检索前端 UI（暗色开发者风格网页，首页 @neko233 品牌 + GitHub 地址 + 渐变字标，纯前端调用 `/search` JSON 渲染，查询词高亮、XSS 转义、内嵌单二进制无需静态文件）、`/robots.txt` 合规声明；**查询词自动补全 suggest**（/suggest + 搜索框防抖下拉）；**打通搜索内容**：`--seed-demo` 写入内置演示文档即可一键验证搜索，检索端口 7512 新增 `POST /docs` 可直接对外写入内容；提供 `scripts/verify.sh` / `verify.ps1` 一键验证。
 - [x] **阶段 5**：多注册中心高可用（leader 选举）——`InMemoryRegistry` 增加 HA 状态与选主方法，节点侧心跳循环按 `{本节点}∪{在线对端}` 字典序最小者选主；非 leader 注册中心对写请求 307 重定向到 leader（单写多备）；`HttpRegistryClient` 支持多注册中心基址故障转移。
 
 ## 9. 当前骨架状态与约定

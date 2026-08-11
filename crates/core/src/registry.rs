@@ -45,7 +45,7 @@ struct RegistryState {
 
 /// 多注册中心高可用状态（零外部依赖，基于心跳租约的 leader 选举）。
 struct HaState {
-    /// 本节点对外可达的标识（即 advertise URL，例如 http://127.0.0.1:7700）。
+    /// 本节点对外可达的标识（即 advertise URL，例如 http://127.0.0.1:7510）。
     self_id: String,
     /// 配置的对端注册中心地址列表。
     peers: Vec<String>,
@@ -102,7 +102,8 @@ impl InMemoryRegistry {
     /// 记录某对端在线及其 self_id（HA 心跳循环调用）。
     pub async fn observe_peer(&self, addr: &str, id: &str) {
         let mut h = self.ha.write().await;
-        h.peer_view.insert(addr.to_string(), (id.to_string(), now_millis()));
+        h.peer_view
+            .insert(addr.to_string(), (id.to_string(), now_millis()));
     }
 
     /// 剔除超过 `ttl_ms` 未心跳的对端。
@@ -187,7 +188,7 @@ impl Registry for InMemoryRegistry {
         let s = self.inner.read().await;
         Ok(s.nodes
             .values()
-            .filter(|n| role.map_or(true, |r| n.role == r))
+            .filter(|n| role.is_none_or(|r| n.role == r))
             .cloned()
             .collect())
     }
@@ -199,5 +200,147 @@ impl Registry for InMemoryRegistry {
 
     async fn claim_task(&self, _crawler_id: &str) -> Result<Option<CrawlTask>> {
         Ok(self.inner.write().await.queue.pop_front())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn register_and_list_nodes() {
+        let reg = InMemoryRegistry::new();
+        reg.register(RegisterRequest {
+            id: "node1".into(),
+            role: Role::Crawler,
+            addr: "http://127.0.0.1:8001".into(),
+        })
+        .await
+        .unwrap();
+
+        let nodes = reg.list_nodes(None).await.unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].id, "node1");
+    }
+
+    #[tokio::test]
+    async fn list_nodes_filter_by_role() {
+        let reg = InMemoryRegistry::new();
+        reg.register(RegisterRequest {
+            id: "c1".into(),
+            role: Role::Crawler,
+            addr: "http://127.0.0.1:8001".into(),
+        })
+        .await
+        .unwrap();
+        reg.register(RegisterRequest {
+            id: "s1".into(),
+            role: Role::Searcher,
+            addr: "http://127.0.0.1:8002".into(),
+        })
+        .await
+        .unwrap();
+
+        let crawlers = reg.list_nodes(Some(Role::Crawler)).await.unwrap();
+        assert_eq!(crawlers.len(), 1);
+        assert_eq!(crawlers[0].id, "c1");
+    }
+
+    #[tokio::test]
+    async fn deregister_removes_node() {
+        let reg = InMemoryRegistry::new();
+        reg.register(RegisterRequest {
+            id: "node1".into(),
+            role: Role::Indexer,
+            addr: "http://127.0.0.1:8001".into(),
+        })
+        .await
+        .unwrap();
+        reg.deregister("node1").await.unwrap();
+
+        let nodes = reg.list_nodes(None).await.unwrap();
+        assert!(nodes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn heartbeat_updates_timestamp() {
+        let reg = InMemoryRegistry::new();
+        reg.register(RegisterRequest {
+            id: "node1".into(),
+            role: Role::All,
+            addr: "http://127.0.0.1:8001".into(),
+        })
+        .await
+        .unwrap();
+
+        let before = reg.list_nodes(None).await.unwrap()[0].last_heartbeat;
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        reg.heartbeat("node1").await.unwrap();
+        let after = reg.list_nodes(None).await.unwrap()[0].last_heartbeat;
+        assert!(after > before);
+    }
+
+    #[tokio::test]
+    async fn heartbeat_unknown_node_errors() {
+        let reg = InMemoryRegistry::new();
+        let result = reg.heartbeat("nonexistent").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn submit_and_claim_task_fifo() {
+        let reg = InMemoryRegistry::new();
+        reg.submit_task(CrawlTask {
+            id: "t1".into(),
+            url: "https://a.com".into(),
+            depth: 0,
+        })
+        .await
+        .unwrap();
+        reg.submit_task(CrawlTask {
+            id: "t2".into(),
+            url: "https://b.com".into(),
+            depth: 0,
+        })
+        .await
+        .unwrap();
+
+        let first = reg.claim_task("crawler1").await.unwrap();
+        assert_eq!(first.unwrap().id, "t1");
+        let second = reg.claim_task("crawler1").await.unwrap();
+        assert_eq!(second.unwrap().id, "t2");
+        let empty = reg.claim_task("crawler1").await.unwrap();
+        assert!(empty.is_none());
+    }
+
+    #[tokio::test]
+    async fn pending_tasks_count() {
+        let reg = InMemoryRegistry::new();
+        assert_eq!(reg.pending_tasks().await, 0);
+        reg.submit_task(CrawlTask {
+            id: "t1".into(),
+            url: "https://a.com".into(),
+            depth: 0,
+        })
+        .await
+        .unwrap();
+        assert_eq!(reg.pending_tasks().await, 1);
+    }
+
+    #[tokio::test]
+    async fn ha_single_node_is_leader() {
+        let reg = InMemoryRegistry::new();
+        assert!(reg.is_leader().await);
+        assert_eq!(reg.leader().await, "local");
+    }
+
+    #[tokio::test]
+    async fn ha_leader_election_min_id_wins() {
+        let reg = InMemoryRegistry::new_with_ha("node-b".into(), vec![]);
+        reg.observe_peer("http://node-a:7510", "node-a").await;
+        reg.recompute_leader().await;
+        // node-a < node-b 字典序，所以 node-a 应该是 leader
+        assert_eq!(reg.leader().await, "node-a");
+        assert!(!reg.is_leader().await);
     }
 }

@@ -123,7 +123,7 @@ impl Indexer for InMemoryIndexer {
         let mut s = self.inner.write().await;
         let id = doc.id.clone();
         // 仅当文档此前不存在时才计入 doc_count，避免重索引（如演示数据重复写入）使计数膨胀。
-        let is_new = s.docs.get(&id).is_none();
+        let is_new = !s.docs.contains_key(&id);
 
         // 若是重新索引，先清理旧词项上的倒排记录与长度统计。
         if let Some(old) = s.docs.get(&id) {
@@ -187,7 +187,11 @@ impl Indexer for InMemoryIndexer {
             })
             .collect();
 
-        out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        out.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         out.truncate(query.top_k.max(1));
         Ok(out)
     }
@@ -208,5 +212,115 @@ impl Indexer for InMemoryIndexer {
             .take(limit.max(1))
             .map(|(t, _)| t)
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Doc, SearchQuery};
+
+    #[test]
+    fn tokenize_splits_chinese_and_english() {
+        let t = tokenize("Rust 编程语言 与 Go");
+        assert!(t.iter().any(|w| w == "rust"), "英文应小写化: {t:?}");
+        assert!(
+            t.iter().any(|w| w == "编程语言"),
+            "中文应保留词级切分: {t:?}"
+        );
+        assert!(t.iter().any(|w| w == "go"));
+        // 单字符英文碎片应被过滤（如 "a"）。
+        assert!(!t
+            .iter()
+            .any(|w| w.len() == 1 && w.chars().all(|c| c.is_alphabetic())));
+    }
+
+    #[test]
+    fn bm25_zero_when_no_docs_or_df_zero() {
+        assert_eq!(bm25(1.0, 10, 0.0, 0, 0), 0.0, "avgdl<=0 应为 0");
+        assert_eq!(bm25(1.0, 10, 5.0, 5, 0), 0.0, "df==0 应为 0");
+    }
+
+    #[test]
+    fn bm25_higher_tf_scores_higher() {
+        let low = bm25(1.0, 100, 100.0, 100, 5);
+        let high = bm25(5.0, 100, 100.0, 100, 5);
+        assert!(high > low, "词频越高 BM25 得分越高");
+    }
+
+    #[tokio::test]
+    async fn inmemory_add_then_search_ranks_match() {
+        let idx = InMemoryIndexer::new();
+        idx.add(Doc {
+            id: "rust".into(),
+            url: "https://rust-lang.org".into(),
+            title: "Rust".into(),
+            body: "rust systems programming language memory safety".into(),
+        })
+        .await
+        .unwrap();
+        idx.add(Doc {
+            id: "go".into(),
+            url: "https://go.dev".into(),
+            title: "Go".into(),
+            body: "go programming language concurrency".into(),
+        })
+        .await
+        .unwrap();
+
+        let r = idx
+            .search(&SearchQuery {
+                q: "rust".into(),
+                top_k: 5,
+            })
+            .await
+            .unwrap();
+        assert!(!r.is_empty(), "应能搜到结果");
+        assert_eq!(r[0].doc.id, "rust", "最相关应为 rust");
+    }
+
+    #[tokio::test]
+    async fn reindex_same_id_does_not_inflate() {
+        let idx = InMemoryIndexer::new();
+        let d = Doc {
+            id: "dup".into(),
+            url: "https://example.com".into(),
+            title: "Dup".into(),
+            body: "hello world foo".into(),
+        };
+        idx.add(d.clone()).await.unwrap();
+        idx.add(d).await.unwrap(); // 重复写入同一 id
+        let r = idx
+            .search(&SearchQuery {
+                q: "hello".into(),
+                top_k: 5,
+            })
+            .await
+            .unwrap();
+        assert_eq!(r.len(), 1, "重复写入不应堆积重复文档");
+    }
+
+    #[tokio::test]
+    async fn suggest_returns_prefix_candidates_by_frequency() {
+        let idx = InMemoryIndexer::new();
+        idx.add(Doc {
+            id: "a".into(),
+            url: "x".into(),
+            title: "Rust".into(),
+            body: "rust rust rust great".into(),
+        })
+        .await
+        .unwrap();
+        idx.add(Doc {
+            id: "b".into(),
+            url: "y".into(),
+            title: "Ruby".into(),
+            body: "ruby fun".into(),
+        })
+        .await
+        .unwrap();
+        let sug = idx.suggest("ru", 10).await.unwrap();
+        assert!(sug.iter().any(|s| s == "rust"));
+        assert!(sug.iter().any(|s| s == "ruby"));
     }
 }

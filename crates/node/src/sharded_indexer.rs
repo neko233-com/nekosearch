@@ -5,10 +5,7 @@
 //! 爬虫/检索服务对分片无感知，仍只依赖 `Arc<dyn Indexer>`。
 
 use async_trait::async_trait;
-use nekosearch_core::{
-    indexer::Indexer,
-    Doc, Result, SearchQuery, SearchResult,
-};
+use nekosearch_core::{indexer::Indexer, Doc, Result, SearchQuery, SearchResult};
 use reqwest::Client;
 
 /// 按 `indexer_remote` 解析出的分片拓扑：外层 Vec 是分片，内层 Vec 是副本基址。
@@ -95,7 +92,11 @@ impl Indexer for ShardedIndexer {
                 }
             }
         }
-        all.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        all.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         all.truncate(query.top_k.max(1));
         Ok(all)
     }
