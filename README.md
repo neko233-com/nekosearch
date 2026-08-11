@@ -22,6 +22,30 @@
 curl "http://localhost:7800/search?q=rust&top_k=10"
 ```
 
+> 首次运行索引是空的（数据要由爬虫爬取或手动写入）。想**立刻验证搜索是否可用**，加 `--seed-demo` 启动参数：会自动写入一组内置演示文档，无需外网即可搜到结果：
+>
+> ```bash
+> cargo run -- --role all --seed-demo
+> curl "http://localhost:7800/search?q=nekosearch&top_k=5"
+> ```
+>
+> 或用脚本一键验证（构建 → 起服务 → 查询 → 断言非空）：
+> `bash scripts/verify.sh` ／ `.\scripts\verify.ps1`
+
+也可直接往对外端口写入内容（索引节点 7900 的 `/docs` 行为一致）：
+
+```bash
+curl -X POST "http://localhost:7800/docs" \
+  -H 'content-type: application/json' \
+  -d '{"id":"doc1","url":"https://example.com","title":"示例标题","body":"示例正文，包含要被检索的关键词"}'
+```
+
+查询词自动补全（输入时下拉候选）：
+
+```bash
+curl "http://localhost:7800/suggest?q=ne&limit=8"
+```
+
 查看注册中心里的节点：
 
 ```bash
@@ -59,6 +83,24 @@ nekosearch --role crawler --seeds https://example.com/   # 爬虫，可开 N 个
 ```
 新增 `crawler` 进程即可直接提升抓取吞吐——注册中心会自动发现并分配任务。
 
+### 多注册中心高可用（Phase 5）
+注册中心支持多实例部署，消除单点：
+- 每个注册中心通过 `peers`（或 `--peers`）知道对端地址，互相每秒心跳（`GET /ping`）。
+- 选主规则：`{本节点} ∪ {在线对端}` 中**字典序最小 id** 为 leader（确定性、无外部协调服务）。
+- 非 leader 注册中心对写请求（register/heartbeat/deregister/nodes/tasks）返回 **307 重定向**到 leader；`HttpRegistryClient` 默认跟随重定向，调用方无感。
+- crawler/indexer/searcher 的 `registry_remote` 填**多个**注册中心地址（逗号分隔），任一宕机自动故障转移到其它实例。
+
+```bash
+# 注册中心 A（leader 候选）
+nekosearch --role registry --registry-addr 0.0.0.0:7700 \
+  --peers http://127.0.0.1:7701
+# 注册中心 B
+nekosearch --role registry --registry-addr 0.0.0.0:7701 \
+  --peers http://127.0.0.1:7700
+# 其它角色指向两个注册中心，任一宕机自动切换
+nekosearch --role crawler --registry-remote "http://127.0.0.1:7700,http://127.0.0.1:7701" --seeds https://example.com/
+```
+
 ## 配置项（YAML / CLI / 环境变量）
 配置以 `config.yaml` 为主（参考 `config.yaml.example`）。CLI 参数与兼容的环境变量优先级更高。常用项：
 - `role` / `--role` / `NEKO_ROLE`：角色，`all`(默认)/registry/crawler/indexer/searcher
@@ -67,6 +109,8 @@ nekosearch --role crawler --seeds https://example.com/   # 爬虫，可开 N 个
 - `seeds` / `--seeds` / `SEEDS`：种子 URL（YAML 用列表，CLI/环境变量逗号分隔）
 - `max_depth` / `MAX_DEPTH`：最大爬取深度
 - `data_dir` / `DATA_DIR`：持久化索引目录（sled），默认 `./data`
+- `seed_demo` / `--seed-demo` / `NEKO_SEED_DEMO`：启动时写入内置演示文档，便于一键验证搜索（无需外网爬取）
+- `peers` / `--peers` / `PEERS`：多注册中心高可用时填写对端注册中心基址（逗号分隔），为空即单机注册中心
 
 ## 架构一览
 ```

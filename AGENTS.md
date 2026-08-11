@@ -18,7 +18,8 @@ nekosearch 是一个**对标 Google 的自建搜索服务器**。设计上**默�
 ```
 crates/core   # 共享内核：协议/数据结构、Registry trait、Indexer trait、错误类型
 crates/node   # 单二进制 nekosearch：注册中心HTTP、索引HTTP、检索HTTP、爬虫执行器与管理器、CLI、YAML配置、持久化索引
-crates/node/static  # 内嵌的检索网页（index.html），由 searcher 通过 include_str! 编译期打包，单二进制即可对外提供类 Google UI
+crates/node/static  # 内嵌的检索网页（index.html），由 searcher 通过 include_str! 编译期打包，单二进制即可对外提供 @neko233 品牌暗色风 UI
+crates/node/demo.rs  # --seed-demo 启动参数写入的内置演示文档，便于一键验证搜索
 ```
 
 ## 4. 架构红线（不可违反）
@@ -48,15 +49,28 @@ crates/node/static  # 内嵌的检索网页（index.html），由 searcher 通�
 # 单机全角色（默认）
 cargo run -- --role all --seeds https://www.rust-lang.org/
 
+# 一键验证搜索是否可用：--seed-demo 写入内置演示文档，无需外网
+cargo run -- --role all --seed-demo
+curl "http://localhost:7800/search?q=nekosearch&top_k=5"
+
 # 检索（JSON API）
 curl "http://localhost:7800/search?q=rust&top_k=10"
 
-# 网页界面（类 Google，浏览器打开）
+# 写入内容（对外端口 7800 与索引端口 7900 的 /docs 一致）
+curl -X POST "http://localhost:7800/docs" -H 'content-type: application/json' \
+  -d '{"id":"d1","url":"https://example.com","title":"标题","body":"正文关键词"}'
+
+# 查询词自动补全
+curl "http://localhost:7800/suggest?q=ne&limit=8"
+
+# 网页界面（@neko233 品牌暗色风，浏览器打开）
 #   http://localhost:7800/
 
 # 查看注册中心节点
 curl "http://localhost:7700/nodes"
 ```
+
+多注册中心高可用（Phase 5）：注册中心实例通过 `--peers` 互知对端，心跳选主（字典序最小 id 为 leader），非 leader 对写请求 307 重定向到 leader；集群角色的 `registry_remote` 填多个注册中心地址（逗号分隔）即具备故障转移。详见 `README.md` 集群模式章节。
 
 ## 9. 新增一个爬虫执行器（扩展点）
 1. 在 `crates/node/src/crawler/` 新建 `xxx_crawler.rs`，实现 `CrawlerExecutor` trait。
