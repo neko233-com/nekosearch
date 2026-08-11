@@ -8,6 +8,7 @@ use nekosearch_core::{CrawlResult, CrawlTask};
 #[async_trait]
 pub trait CrawlerExecutor: Send + Sync {
     /// 执行器名称，用于标识。
+    #[allow(dead_code)]
     fn name(&self) -> &'static str;
     /// 执行一次抓取，返回结构化结果。
     async fn crawl(&self, task: &CrawlTask) -> anyhow::Result<CrawlResult>;

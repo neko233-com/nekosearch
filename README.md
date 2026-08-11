@@ -22,15 +22,20 @@
 curl "http://localhost:7800/search?q=rust&top_k=10"
 ```
 
-> 首次运行索引是空的（数据要由爬虫爬取或手动写入）。想**立刻验证搜索是否可用**，加 `--seed-demo` 启动参数：会自动写入一组内置演示文档，无需外网即可搜到结果：
+> **单机开箱即搜**：`--role all` 且未配置任何爬取种子时（默认情况），启动会自动写入一组**各编程语言官方网站**的内置演示数据（Rust / Go / Python / JS / TS / Java / C++ / Kotlin / Swift / Ruby / PHP / Node.js …），无需外网即可直接搜索：
 >
 > ```bash
-> cargo run -- --role all --seed-demo
-> curl "http://localhost:7800/search?q=nekosearch&top_k=5"
+> cargo run -- --role all
+> curl "http://localhost:7800/search?q=rust&top_k=5"      # 返回 rust-lang.org
+> curl "http://localhost:7800/search?q=python&top_k=5"    # 返回 python.org
 > ```
 >
-> 或用脚本一键验证（构建 → 起服务 → 查询 → 断言非空）：
+> 想显式控制，可加 `--seed-demo`（强制写入）或配置 `seeds`（去爬真实网页，不再注入演示数据）。
+>
+> 一键验证（构建 → 起服务 → 查询多语言官网 → 断言命中 → 校验自动补全）：
 > `bash scripts/verify.sh` ／ `.\scripts\verify.ps1`
+>
+> 验证脚本会断言 `rust→rust-lang.org`、`go→go.dev`、`python→python.org`、`java→java.com`、`c++→cppreference.com`，并校验 `/suggest` 自动补全。
 
 也可直接往对外端口写入内容（索引节点 7900 的 `/docs` 行为一致）：
 
@@ -52,14 +57,14 @@ curl "http://localhost:7800/suggest?q=ne&limit=8"
 curl "http://localhost:7700/nodes"
 ```
 
-### 网页界面（类 Google）
-起好后直接用浏览器打开检索服务的地址即可使用类 Google 的搜索页：
+### 网页界面
+起好后直接用浏览器打开检索服务的地址即可使用搜索页：
 
 ```
 http://localhost:7800/
 ```
 
-首页是居中的搜索框，输入关键词回车后进入结果页（标题链接 + 绿色 URL + 摘要查询词高亮），纯前端调用 `/search` JSON 接口渲染，UI 随二进制内嵌、无需额外部署静态文件。对外提供搜索时，把这一个端口（默认 7800）用反向代理暴露出去即可。
+首页是带 `@neko233` 品牌与 GitHub 入口的暗色开发者风格搜索页，下方有一排编程语言快捷搜索（Rust / Go / Python …）。输入关键词回车后进入结果页（标题链接 + 绿色 URL + 摘要查询词高亮），纯前端调用 `/search` JSON 接口渲染，UI 随二进制内嵌、无需额外部署静态文件。对外提供搜索时，把这一个端口（默认 7800）用反向代理暴露出去即可。
 
 ## 手动方式
 

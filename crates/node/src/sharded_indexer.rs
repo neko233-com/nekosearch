@@ -106,10 +106,11 @@ impl Indexer for ShardedIndexer {
             // 每个分片查询第一个（主）副本的 /suggest。
             let replica = &shard[0];
             let url = format!("{replica}/suggest");
+            let lim = limit.max(1).to_string();
             match self
                 .client
                 .get(&url)
-                .query(&[("q", prefix), ("limit", &limit.max(1).to_string())])
+                .query(&[("q", prefix), ("limit", lim.as_str())])
                 .send()
                 .await
             {

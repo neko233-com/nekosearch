@@ -164,6 +164,16 @@ async fn main() -> anyhow::Result<()> {
     let run_crawler = matches!(role, Role::All | Role::Crawler);
     let run_searcher = matches!(role, Role::All | Role::Searcher);
 
+    // 便捷默认：本节点承载索引且未配置任何爬取种子时，自动写入内置「编程语言官网」
+    // 演示数据，让单机部署开箱即可搜索，无需先爬外网。显式 --seed-demo 或配置了 seeds
+    // 时按用户意图（种子存在则去爬真实网页，不再注入演示数据）。
+    if !cfg.seed_demo && run_indexer && cfg.seeds.is_empty() {
+        cfg.seed_demo = true;
+        tracing::info!(
+            "no seeds configured; auto-seeding built-in language official-site demo so first-run search works"
+        );
+    }
+
     // 本节点若承担 registry 角色，则启动进程内实现；否则使用远端 HTTP 客户端。
     let inmem_registry = if run_registry {
         // self_id 用对外可达地址（0.0.0.0 视为本机回环），供多注册中心选主互相识别。

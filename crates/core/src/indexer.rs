@@ -33,7 +33,7 @@ pub fn tokenize(text: &str) -> Vec<String> {
 
     let mut out = Vec::new();
     for raw in jieba.cut(text, false) {
-        let s = raw.trim();
+        let s = raw.word.trim();
         if s.is_empty() {
             continue;
         }
@@ -122,6 +122,8 @@ impl Indexer for InMemoryIndexer {
     async fn add(&self, doc: Doc) -> Result<()> {
         let mut s = self.inner.write().await;
         let id = doc.id.clone();
+        // 仅当文档此前不存在时才计入 doc_count，避免重索引（如演示数据重复写入）使计数膨胀。
+        let is_new = s.docs.get(&id).is_none();
 
         // 若是重新索引，先清理旧词项上的倒排记录与长度统计。
         if let Some(old) = s.docs.get(&id) {
@@ -136,7 +138,9 @@ impl Indexer for InMemoryIndexer {
         }
 
         s.docs.insert(id.clone(), doc.clone());
-        s.doc_count += 1;
+        if is_new {
+            s.doc_count += 1;
+        }
 
         let len = tokenize(&doc.title).len() + tokenize(&doc.body).len();
         s.doc_len.insert(id.clone(), len);

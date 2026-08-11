@@ -12,7 +12,7 @@ use axum::{
 };
 use nekosearch_core::{
     registry::{InMemoryRegistry, Registry},
-    IdRequest, NodeInfo, RegisterRequest, Role,
+    IdRequest, RegisterRequest, Role,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -61,7 +61,7 @@ pub async fn run_ha_loop(reg: InMemoryRegistry) {
 }
 
 /// 健康/选举探测响应。
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 struct PingResp {
     id: String,
     leader: String,
@@ -124,7 +124,7 @@ async fn deregister(
     if let Some(r) = leader_guard(&reg, "deregister").await {
         return r;
     }
-    reg.deregister(&req.id).await;
+    let _ = reg.deregister(&req.id).await;
     StatusCode::OK.into_response()
 }
 

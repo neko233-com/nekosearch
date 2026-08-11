@@ -123,6 +123,8 @@ impl Indexer for SledIndexer {
             .db
             .get(Self::doc_key(&id))
             .map_err(|e| nekosearch_core::Error::Index(e.to_string()))?;
+        // 仅当文档此前不存在时才计入 doc_count，避免重索引（如演示数据重复写入）使计数膨胀。
+        let is_new = old.is_none();
         if let Some(old_bytes) = old {
             if let Ok(old) = serde_json::from_slice::<Doc>(&old_bytes) {
                 for t in tokenize(&old.title).into_iter().chain(tokenize(&old.body)) {
@@ -151,7 +153,9 @@ impl Indexer for SledIndexer {
         let len = (tokenize(&doc.title).len() + tokenize(&doc.body).len()) as u64;
         self.set_u64(&Self::len_key(&id), len)?;
         self.set_u64(META_TOTAL_LEN, self.total_len() + len)?;
-        self.inc_doc_count()?;
+        if is_new {
+            self.inc_doc_count()?;
+        }
 
         // 尽快落盘；sled 也会在后台周期性 flush。
         self.db

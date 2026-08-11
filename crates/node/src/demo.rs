@@ -1,71 +1,127 @@
-//! 演示数据集：开启 `--seed-demo` 时写入索引，便于一键验证搜索是否可用。
+//! 内置演示数据集：开启 `--seed-demo`（或单机无种子时自动启用）时写入索引，
+//! 让单机部署开箱即可搜索各编程语言的官方网站，无需外网爬取即可验证搜索可用。
 //!
-//! 无需外网爬取即可让 `/search` 返回结果，覆盖中英文关键词，方便验证分词与 BM25 排序。
+//! 每条文档对应一个编程语言的官方站点，标题/正文均包含语言名与「官网/官方文档」等
+//! 关键词，便于验证中英文分词与 BM25 排序。id 稳定，重复写入会原地更新，不会堆积。
 
 use nekosearch_core::Doc;
 
-/// 返回一组内置演示文档（id 稳定，重复写入会原地更新，不会重复堆积）。
+/// 返回一组内置演示文档（编程语言官方网站）。
 pub fn demo_docs() -> Vec<Doc> {
     vec![
         Doc {
-            id: "demo-nekosearch".into(),
-            url: "https://github.com/neko233-com/nekosearch".into(),
-            title: "nekosearch · 自托管搜索引擎".into(),
-            body: "nekosearch 是一个对标 Google 的自建搜索服务器，默认单机部署，架构天生支持集群与水平扩容。由 @neko233 开发，使用 Rust 编写。".into(),
-        },
-        Doc {
-            id: "demo-rust".into(),
+            id: "lang-rust".into(),
             url: "https://www.rust-lang.org/".into(),
-            title: "Rust 编程语言".into(),
-            body: "Rust 是一门系统级编程语言，注重内存安全与并发安全，无垃圾回收，性能可与 C++ 媲美。nekosearch 正是用 Rust 实现的搜索引擎。".into(),
+            title: "Rust 官方网站 rust-lang.org".into(),
+            body: "Rust 官方站 rust-lang.org 提供语言文档、编译器下载与学习资源。Rust 是注重内存安全与并发安全的系统级编程语言，无垃圾回收，性能媲美 C++。nekosearch 本身即用 Rust 实现。".into(),
         },
         Doc {
-            id: "demo-bm25".into(),
-            url: "https://en.wikipedia.org/wiki/Okapi_BM25".into(),
-            title: "BM25 排序算法".into(),
-            body: "BM25 是搜索引擎中常用的相关度排序函数，基于概率检索模型。它考虑了词频、逆文档频率和文档长度归一化。nekosearch 使用 BM25（k1=1.5, b=0.75）对结果打分。".into(),
+            id: "lang-go".into(),
+            url: "https://go.dev/".into(),
+            title: "Go 官方网站 go.dev".into(),
+            body: "Go 官方站 go.dev 是 Go 语言的总入口，提供文档、教程与下载。Go（Golang）由 Google 设计，语法简洁、原生支持并发（goroutine），适合云原生与后端服务。".into(),
         },
         Doc {
-            id: "demo-jieba".into(),
-            url: "https://github.com/messense/jieba-rs".into(),
-            title: "jieba 中文分词".into(),
-            body: "jieba-rs 是 Rust 实现的中文分词库，内置词典、零外部依赖。nekosearch 用它做中文词级切分，让中文搜索也能正确命中。".into(),
+            id: "lang-python".into(),
+            url: "https://www.python.org/".into(),
+            title: "Python 官方网站 python.org".into(),
+            body: "Python 官方站 python.org 提供语言文档、标准库参考与安装包下载。Python 是易学易用的高级脚本语言，广泛用于数据科学、人工智能与自动化。".into(),
         },
         Doc {
-            id: "demo-cluster".into(),
-            url: "https://github.com/neko233-com/nekosearch#cluster".into(),
-            title: "nekosearch 的集群与分片".into(),
-            body: "nekosearch 默认单机，但架构从第一天起就是集群。索引按 doc.id 做 FNV-1a 哈希分片，支持多副本，爬虫执行器可水平扩容，由注册中心统一管理。".into(),
+            id: "lang-javascript".into(),
+            url: "https://developer.mozilla.org/zh-CN/docs/Web/JavaScript".into(),
+            title: "JavaScript 官方文档 MDN".into(),
+            body: "JavaScript 的权威参考是 MDN Web Docs，由 Mozilla 维护，覆盖语法、标准库与 Web API。JavaScript 是浏览器的原生脚本语言，也是 Node.js 等服务端运行时的基础。ECMAScript 是其官方标准。".into(),
         },
         Doc {
-            id: "demo-crawler".into(),
-            url: "https://github.com/neko233-com/nekosearch#crawler".into(),
-            title: "爬虫执行器".into(),
-            body: "nekosearch 的爬虫执行器向注册中心注册，持续领取抓取任务，抓取网页后写入索引，并把外链回灌为新任务做 BFS 扩散。".into(),
+            id: "lang-typescript".into(),
+            url: "https://www.typescriptlang.org/".into(),
+            title: "TypeScript 官方网站 typescriptlang.org".into(),
+            body: "TypeScript 官方站 typescriptlang.org 提供上手指南、Playground 与手册。TypeScript 是 JavaScript 的超集，增加了静态类型，由 Microsoft 开发，编译为 JS 运行。".into(),
         },
         Doc {
-            id: "demo-registry".into(),
-            url: "https://github.com/neko233-com/nekosearch#registry".into(),
-            title: "注册中心".into(),
-            body: "注册中心（registry）管理各个爬虫执行器和节点，是集群的协调者。多注册中心模式下通过 leader 选举实现高可用。".into(),
+            id: "lang-java".into(),
+            url: "https://www.java.com/".into(),
+            title: "Java 官方网站 java.com".into(),
+            body: "Java 官方站 java.com 提供 JRE/JDK 下载与入门。Java 是面向对象的跨平台语言，遵循「一次编写，到处运行」，广泛用于企业后端与安卓开发；权威文档在 Oracle 的 docs.oracle.com。".into(),
         },
         Doc {
-            id: "demo-suggest".into(),
-            url: "https://github.com/neko233-com/nekosearch#suggest".into(),
-            title: "搜索建议 suggest".into(),
-            body: "nekosearch 支持查询词自动补全，输入前缀即可从索引词表中返回候选词，帮助快速完成搜索。".into(),
+            id: "lang-cpp".into(),
+            url: "https://en.cppreference.com/w/cpp".into(),
+            title: "C++ 官方参考 cppreference".into(),
+            body: "C++ 的权威参考资料站是 cppreference.com，覆盖标准库与语言特性。C++ 是 C 的超集，支持面向对象与泛型编程，常用于系统软件、游戏引擎与高性能计算；标准由 ISO 维护。".into(),
         },
         Doc {
-            id: "demo-deploy".into(),
-            url: "https://github.com/neko233-com/nekosearch#deploy".into(),
-            title: "傻瓜式部署".into(),
-            body: "nekosearch 提供 deploy.sh 与 deploy.ps1 一键安装脚本，配置使用 YAML，默认单机即可运行，也可通过 Docker 部署。".into(),
+            id: "lang-c".into(),
+            url: "https://en.cppreference.com/w/c".into(),
+            title: "C 语言官方参考 cppreference".into(),
+            body: "C 语言的权威参考资料站是 cppreference.com 的 C 部分。C 是经典的过程式系统编程语言，语法简洁、贴近硬件，是操作系统与嵌入式开发的基石；标准由 ISO 维护。".into(),
         },
         Doc {
-            id: "demo-selfhost".into(),
-            url: "https://github.com/neko233-com/nekosearch#self-hosted".into(),
-            title: "自托管搜索".into(),
-            body: "把搜索掌握在自己手里：nekosearch 让你在自己的服务器上运行一个私有的、可集群的搜索引擎，数据完全自控。".into(),
+            id: "lang-csharp".into(),
+            url: "https://learn.microsoft.com/dotnet/csharp/".into(),
+            title: "C# 官方文档 Microsoft Learn".into(),
+            body: "C# 的官方文档在 Microsoft Learn 的 .NET C# 栏目。C# 是微软推出的现代面向对象语言，运行于 .NET 运行时，广泛用于桌面、Web 与游戏（Unity）开发。".into(),
+        },
+        Doc {
+            id: "lang-kotlin".into(),
+            url: "https://kotlinlang.org/".into(),
+            title: "Kotlin 官方网站 kotlinlang.org".into(),
+            body: "Kotlin 官方站 kotlinlang.org 提供语言文档、在线 playground 与下载。Kotlin 是运行在 JVM 上的现代静态语言，由 JetBrains 开发，是 Android 官方首选语言。".into(),
+        },
+        Doc {
+            id: "lang-swift".into(),
+            url: "https://www.swift.org/".into(),
+            title: "Swift 官方网站 swift.org".into(),
+            body: "Swift 官方站 swift.org 是开源的 Swift 语言门户，提供文档与教程。Swift 由 Apple 推出，用于 iOS/macOS 开发，也可在服务端运行，语法安全且高性能。".into(),
+        },
+        Doc {
+            id: "lang-ruby".into(),
+            url: "https://www.ruby-lang.org/".into(),
+            title: "Ruby 官方网站 ruby-lang.org".into(),
+            body: "Ruby 官方站 ruby-lang.org 提供文档、下载与新闻。Ruby 是注重开发乐趣的动态面向对象脚本语言，以优雅语法著称，Ruby on Rails 是其著名 Web 框架。".into(),
+        },
+        Doc {
+            id: "lang-php".into(),
+            url: "https://www.php.net/".into(),
+            title: "PHP 官方网站 php.net".into(),
+            body: "PHP 官方站 php.net 提供语言手册、函数参考与下载。PHP 是专为 Web 开发设计的服务端脚本语言，广泛应用于内容管理系统与后端接口。".into(),
+        },
+        Doc {
+            id: "lang-node".into(),
+            url: "https://nodejs.org/".into(),
+            title: "Node.js 官方网站 nodejs.org".into(),
+            body: "Node.js 官方站 nodejs.org 提供运行时下载与 API 文档。Node.js 是基于 V8 引擎的 JavaScript 服务端运行时，事件驱动、非阻塞 I/O，适合高并发网络服务。".into(),
+        },
+        Doc {
+            id: "lang-deno".into(),
+            url: "https://deno.com/".into(),
+            title: "Deno 官方网站 deno.com".into(),
+            body: "Deno 官方站 deno.com 是新一代 JavaScript/TypeScript 运行时，由 Node.js 原作者在 Rust 上重建，默认安全、原生支持 TypeScript，强调现代 Web 标准。".into(),
+        },
+        Doc {
+            id: "lang-scala".into(),
+            url: "https://www.scala-lang.org/".into(),
+            title: "Scala 官方网站 scala-lang.org".into(),
+            body: "Scala 官方站 scala-lang.org 提供文档与下载。Scala 融合面向对象与函数式编程，运行于 JVM，常用于大数据处理（如 Spark）。".into(),
+        },
+        Doc {
+            id: "lang-haskell".into(),
+            url: "https://www.haskell.org/".into(),
+            title: "Haskell 官方网站 haskell.org".into(),
+            body: "Haskell 官方站 haskell.org 是纯函数式编程语言 Haskell 的门户，提供编译器 GHC 与教程。Haskell 以强类型与惰性求值为特色，常用于研究与教学。".into(),
+        },
+        Doc {
+            id: "lang-dart".into(),
+            url: "https://dart.dev/".into(),
+            title: "Dart 官方网站 dart.dev".into(),
+            body: "Dart 官方站 dart.dev 提供语言文档与 SDK 下载。Dart 是 Google 推出的客户端优化语言，是 Flutter 跨平台 UI 框架的底层语言，可编译为原生与 JS。".into(),
+        },
+        Doc {
+            id: "lang-elixir".into(),
+            url: "https://elixir-lang.org/".into(),
+            title: "Elixir 官方网站 elixir-lang.org".into(),
+            body: "Elixir 官方站 elixir-lang.org 提供指南与文档。Elixir 是运行于 Erlang VM 的函数式语言，擅长高并发、分布式与容错系统，常用于实时通信后端。".into(),
         },
     ]
 }

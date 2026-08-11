@@ -1,6 +1,6 @@
 //! 检索服务 HTTP 服务（对外网页 + JSON API）。
 //!
-//! - `GET /`            类 Google 的搜索网页（首页 + 结果页，纯前端调用 `/search`）。
+//! - `GET /`            搜索网页（首页 + 结果页，纯前端调用 `/search`）。
 //! - `GET /search`      JSON 检索接口：`?q=<关键词>&top_k=<n>`，返回 `Vec<SearchResult>`。
 //! - `GET /robots.txt`  爬虫合规声明。
 //!
@@ -36,7 +36,7 @@ pub async fn serve(addr: &str, indexer: Arc<dyn Indexer>) -> anyhow::Result<()> 
     Ok(())
 }
 
-/// 类 Google 搜索网页。
+/// 搜索网页首页。
 async fn home() -> Html<&'static str> {
     Html(INDEX_HTML)
 }
