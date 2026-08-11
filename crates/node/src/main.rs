@@ -13,14 +13,14 @@
 mod config;
 mod crawler;
 mod indexer;
-mod indexer_client;
+mod sharded_indexer;
 mod persistent_indexer;
 mod registry;
 mod registry_client;
 mod searcher;
 
 use clap::{Parser, ValueEnum};
-use nekosearch_core::{indexer::Indexer, registry::{InMemoryRegistry, Registry}, Role};
+use nekosearch_core::{indexer::{InMemoryIndexer, Indexer}, registry::{InMemoryRegistry, Registry}, Role};
 use std::sync::Arc;
 
 /// 命令行选定的角色。映射到底层 [`Role`] 协议枚举。
@@ -157,9 +157,13 @@ async fn main() -> anyhow::Result<()> {
         Some(r) => Arc::new(r.clone()),
         None => Arc::new(registry_client::HttpRegistryClient::new(cfg.registry_remote.clone())),
     };
-    let indexer: Arc<dyn Indexer> = match &sled_indexer {
-        Some(i) => Arc::new(i.clone()),
-        None => Arc::new(indexer_client::HttpIndexerClient::new(cfg.indexer_remote.clone())),
+    let indexer: Arc<dyn Indexer> = if let Some(i) = &sled_indexer {
+        Arc::new(i.clone())
+    } else if cfg.indexer_remote.trim().is_empty() {
+        // 索引不在此节点运行，也未配置远端（如纯 registry 节点），用内存实现占位，避免空配置崩溃。
+        Arc::new(InMemoryIndexer::new())
+    } else {
+        Arc::new(sharded_indexer::ShardedIndexer::new(&cfg.indexer_remote)?)
     };
 
     if let Some(reg) = &inmem_registry {

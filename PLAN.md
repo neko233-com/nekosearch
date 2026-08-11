@@ -57,7 +57,7 @@
 ## 6. 技术选型
 - Rust stable + tokio + axum（HTTP 服务）。
 - 注册中心 / 索引：进程内内存实现，零外部服务（etcd/Consul/NATS 不在默认链路）。
-- 检索评分：简化 TF-IDF 骨架；生产替换为 Tantivy / Meilisearch 等。
+- 检索评分：BM25（标准 k1/b）+ jieba 中文分词；生产可替换为 Tantivy / Meilisearch 等。
 - 部署：Docker 多阶段构建 + docker-compose 一键起；`deploy.sh`（Linux/macOS）与 `deploy.ps1`（Windows）自动识别 docker/cargo。
 - 配置：YAML（`config.yaml`，参考 `config.yaml.example`），CLI/环境变量可覆盖。
 - 持久化：默认单机使用 sled（纯 Rust 嵌入式 KV，零外部依赖）保存倒排索引，重启不丢数据。
@@ -71,8 +71,8 @@
 ## 8. 里程碑 / 路线图
 - [x] **阶段 0（当前骨架）**：Cargo workspace、注册中心 trait+内存实现+HTTP、索引 trait+内存实现+HTTP、检索 API、爬虫执行器 trait + http/fs 示例、CLI 多角色、傻瓜式部署、AGENTS/PLAN。
 - [x] **阶段 1**：持久化索引（sled 嵌入式 KV，零外部依赖），进程重启不丢数据；并接入 YAML 配置、新增 `deploy.ps1` 一键安装。
-- [ ] **阶段 2**：中文分词（jieba）与更优排序（BM25 + 向量）。
-- [ ] **阶段 3**：索引分片与多副本（注册中心管理 indexer 集群），真正水平扩展检索容量。
+- [x] **阶段 2**：中文分词（jieba，纯 Rust 内置词典）接入 `tokenize`，评分升级为 BM25（k1=1.5/b=0.75，跟踪文档长度）。
+- [x] **阶段 3**：索引分片与多副本——新增 `ShardedIndexer`，按 `doc.id` 稳定哈希分片、分片内多副本写入、检索跨分片合并；`indexer_remote` 支持 `分片A|副本B,分片C` 格式。注册中心仍统一管理节点生命周期。
 - [ ] **阶段 4**：检索前端 UI、查询词建议、站点地图/robots 合规抓取。
 - [ ] **阶段 5**：多注册中心高可用（leader 选举），消除单点。
 

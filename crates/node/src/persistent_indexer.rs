@@ -1,11 +1,10 @@
 //! 基于 sled 的持久化索引实现。
 //!
 //! 默认单机模式使用本实现：文档与倒排记录写入嵌入式 KV 存储（sled），
-//! 进程重启后索引不丢。评分逻辑与 `InMemoryIndexer` 保持一致（简化 TF-IDF），
-//! 因此单机/集群检索结果可对齐。
+//! 进程重启后索引不丢。评分采用 BM25（与 `InMemoryIndexer` 一致），支持中文（jieba 分词）。
 
 use async_trait::async_trait;
-use nekosearch_core::indexer::{tokenize, Indexer};
+use nekosearch_core::indexer::{bm25, tokenize, Indexer};
 use nekosearch_core::{Doc, Result, SearchQuery, SearchResult};
 use std::collections::HashMap;
 
@@ -13,6 +12,8 @@ use std::collections::HashMap;
 const DOC_PREFIX: &str = "doc:";
 const POST_PREFIX: &str = "post:";
 const META_DOC_COUNT: &str = "meta:doc_count";
+const META_TOTAL_LEN: &str = "meta:total_len";
+const LEN_PREFIX: &str = "len:";
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct PostingEntry {
@@ -39,6 +40,10 @@ impl SledIndexer {
 
     fn post_key(term: &str) -> String {
         format!("{POST_PREFIX}{term}")
+    }
+
+    fn len_key(id: &str) -> String {
+        format!("{LEN_PREFIX}{id}")
     }
 
     fn get_postings(&self, term: &str) -> Result<Vec<PostingEntry>> {
@@ -74,22 +79,37 @@ impl SledIndexer {
         Ok(())
     }
 
-    fn doc_count(&self) -> u64 {
-        match self.db.get(META_DOC_COUNT) {
-            Ok(Some(bytes)) => {
-                let s = std::str::from_utf8(&bytes).unwrap_or("0");
-                s.parse::<u64>().unwrap_or(0)
-            }
+    fn get_u64(&self, key: &str) -> u64 {
+        match self.db.get(key) {
+            Ok(Some(bytes)) => std::str::from_utf8(&bytes)
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0),
             _ => 0,
         }
     }
 
-    fn inc_doc_count(&self) -> Result<()> {
-        let n = self.doc_count() + 1;
+    fn set_u64(&self, key: &str, v: u64) -> Result<()> {
         self.db
-            .insert(META_DOC_COUNT, n.to_string().as_bytes())
+            .insert(key, v.to_string().as_bytes())
             .map_err(|e| nekosearch_core::Error::Index(e.to_string()))?;
         Ok(())
+    }
+
+    fn doc_count(&self) -> u64 {
+        self.get_u64(META_DOC_COUNT)
+    }
+
+    fn total_len(&self) -> u64 {
+        self.get_u64(META_TOTAL_LEN)
+    }
+
+    fn get_doc_len(&self, id: &str) -> u64 {
+        self.get_u64(&Self::len_key(id))
+    }
+
+    fn inc_doc_count(&self) -> Result<()> {
+        self.set_u64(META_DOC_COUNT, self.doc_count() + 1)
     }
 }
 
@@ -98,7 +118,7 @@ impl Indexer for SledIndexer {
     async fn add(&self, doc: Doc) -> Result<()> {
         let id = doc.id.clone();
 
-        // 重新索引：先清理旧词项上的倒排记录。
+        // 重新索引：先清理旧词项上的倒排记录与长度统计。
         let old = self
             .db
             .get(Self::doc_key(&id))
@@ -108,6 +128,10 @@ impl Indexer for SledIndexer {
                 for t in tokenize(&old.title).into_iter().chain(tokenize(&old.body)) {
                     self.remove_posting(&t, &id)?;
                 }
+            }
+            let old_len = self.get_doc_len(&id);
+            if old_len > 0 {
+                self.set_u64(META_TOTAL_LEN, self.total_len().saturating_sub(old_len))?;
             }
         }
 
@@ -124,7 +148,11 @@ impl Indexer for SledIndexer {
             self.append_posting(&t, &id, tf)?;
         }
 
+        let len = (tokenize(&doc.title).len() + tokenize(&doc.body).len()) as u64;
+        self.set_u64(&Self::len_key(&id), len)?;
+        self.set_u64(META_TOTAL_LEN, self.total_len() + len)?;
         self.inc_doc_count()?;
+
         // 尽快落盘；sled 也会在后台周期性 flush。
         self.db
             .flush()
@@ -133,17 +161,22 @@ impl Indexer for SledIndexer {
     }
 
     async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>> {
-        let n = self.doc_count().max(1) as f32;
+        let n = self.doc_count().max(1) as usize;
+        let total = self.total_len();
+        let avgdl = if n > 0 {
+            total as f64 / n as f64
+        } else {
+            0.0
+        };
         let mut scores: HashMap<String, f32> = HashMap::new();
 
         for term in tokenize(&query.q) {
             let entries = self.get_postings(&term)?;
-            let df = entries.len() as f32;
-            // idf = ln((N - df + 0.5) / (df + 0.5) + 1)，未出现的词视为 0。
-            let idf = ((n - df + 0.5) / (df + 0.5) + 1.0).ln().max(0.0);
+            let df = entries.len();
             for e in entries {
-                let norm = (1.0 + e.tf).ln();
-                *scores.entry(e.doc_id).or_insert(0.0) += norm * idf;
+                let dl = self.get_doc_len(&e.doc_id) as usize;
+                let sc = bm25(e.tf, dl, avgdl, n, df) as f32;
+                *scores.entry(e.doc_id).or_insert(0.0) += sc;
             }
         }
 

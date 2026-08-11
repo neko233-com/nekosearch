@@ -10,3 +10,5 @@ serde_json = "1"
 thiserror = "1"
 async-trait = "0.1"
 tokio = { version = "1", features = ["sync"] }
+# 中文分词：纯 Rust 实现、内置词典、零外部依赖。
+jieba-rs = "0.10"

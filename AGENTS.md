@@ -11,6 +11,7 @@ nekosearch 是一个**对标 Google 的自建搜索服务器**。设计上**默�
 - 序列化：serde / serde_json。
 - CLI：clap；配置以 **YAML** 为主（见 `config.yaml.example`），clap 兼容环境变量作为兜底。
 - 外部服务依赖：**默认零依赖**。单机模式不依赖 etcd / Consul / NATS 等任何外部服务；集群模式也仅依赖本进程内的注册中心 HTTP 服务。新增外部依赖须在本文件登记并经评审。
+- 中文分词：引入 `jieba-rs`（纯 Rust、内置词典、零外部依赖），属允许的库依赖，不破坏「零外部服务」红线。
 - 本地需安装 Rust 工具链（`rustup`）。本仓库含 `rust-toolchain.toml` 固定 stable。
 
 ## 3. 目录结构

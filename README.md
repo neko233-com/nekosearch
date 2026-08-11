@@ -54,7 +54,7 @@ nekosearch --role crawler --seeds https://example.com/   # 爬虫，可开 N 个
 配置以 `config.yaml` 为主（参考 `config.yaml.example`）。CLI 参数与兼容的环境变量优先级更高。常用项：
 - `role` / `--role` / `NEKO_ROLE`：角色，`all`(默认)/registry/crawler/indexer/searcher
 - `registry_addr` / `indexer_addr` / `searcher_addr`：本节点各服务监听地址
-- `registry_remote` / `indexer_remote`：集群模式下连接远端注册中心/索引的基址
+- `registry_remote` / `indexer_remote`：集群模式下连接远端注册中心/索引的基址（`indexer_remote` 支持分片与多副本，格式见 `config.yaml.example`）
 - `seeds` / `--seeds` / `SEEDS`：种子 URL（YAML 用列表，CLI/环境变量逗号分隔）
 - `max_depth` / `MAX_DEPTH`：最大爬取深度
 - `data_dir` / `DATA_DIR`：持久化索引目录（sled），默认 `./data`
@@ -65,7 +65,7 @@ nekosearch --role crawler --seeds https://example.com/   # 爬虫，可开 N 个
 ```
 - **注册中心**：节点发现 + 抓取任务调度，失联自动剔除。
 - **爬虫执行器**：实现 `CrawlerExecutor` trait；当前内置 http / fs 两个示例，新增数据源只需加一个实现。
-- **索引**：进程内倒排索引（骨架级 TF-IDF），单机/集群共用 `Indexer` trait。
+- **索引**：sled 持久化倒排索引 + BM25 评分 + jieba 中文分词，单机/集群共用 `Indexer` trait；集群下 `indexer_remote` 可配置分片与多副本。
 
 详见 [PLAN.md](./PLAN.md)（架构与路线图）与 [AGENTS.md](./AGENTS.md)（开发规范）。
 
