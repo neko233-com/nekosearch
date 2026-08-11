@@ -28,6 +28,15 @@ curl "http://localhost:7800/search?q=rust&top_k=10"
 curl "http://localhost:7700/nodes"
 ```
 
+### 网页界面（类 Google）
+起好后直接用浏览器打开检索服务的地址即可使用类 Google 的搜索页：
+
+```
+http://localhost:7800/
+```
+
+首页是居中的搜索框，输入关键词回车后进入结果页（标题链接 + 绿色 URL + 摘要查询词高亮），纯前端调用 `/search` JSON 接口渲染，UI 随二进制内嵌、无需额外部署静态文件。对外提供搜索时，把这一个端口（默认 7800）用反向代理暴露出去即可。
+
 ## 手动方式
 
 ### 用 Docker
