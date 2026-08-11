@@ -16,6 +16,8 @@ pub trait Indexer: Send + Sync {
     async fn add(&self, doc: Doc) -> Result<()>;
     /// 执行检索，返回按相关性降序排列的结果（最多 `top_k` 条）。
     async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>>;
+    /// 查询词自动补全：返回以 `prefix` 开头的候选词（按文档频率降序），最多 `limit` 条。
+    async fn suggest(&self, prefix: &str, limit: usize) -> Result<Vec<String>>;
 }
 
 /// 分词：中文走 jieba 词级切分，英文/数字按非字母数字切分并过滤单字符碎片。
@@ -184,5 +186,23 @@ impl Indexer for InMemoryIndexer {
         out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         out.truncate(query.top_k.max(1));
         Ok(out)
+    }
+
+    async fn suggest(&self, prefix: &str, limit: usize) -> Result<Vec<String>> {
+        let s = self.inner.read().await;
+        let p = prefix.to_lowercase();
+        let mut terms: Vec<(String, usize)> = s
+            .postings
+            .iter()
+            .filter(|(t, _)| t.starts_with(&p))
+            .map(|(t, m)| (t.clone(), m.len()))
+            .collect();
+        // 按文档频率降序，频率相同按词字典序，保证结果稳定。
+        terms.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        Ok(terms
+            .into_iter()
+            .take(limit.max(1))
+            .map(|(t, _)| t)
+            .collect())
     }
 }

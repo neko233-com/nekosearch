@@ -196,4 +196,27 @@ impl Indexer for SledIndexer {
         out.truncate(query.top_k.max(1));
         Ok(out)
     }
+
+    async fn suggest(&self, prefix: &str, limit: usize) -> Result<Vec<String>> {
+        let p = prefix.to_lowercase();
+        let mut terms: Vec<(String, usize)> = Vec::new();
+        for item in self.db.scan_prefix(POST_PREFIX) {
+            let (k, v) = item.map_err(|e| nekosearch_core::Error::Index(e.to_string()))?;
+            let kstr = std::str::from_utf8(&k).unwrap_or("");
+            if let Some(term) = kstr.strip_prefix(POST_PREFIX) {
+                if term.starts_with(&p) {
+                    let df = serde_json::from_slice::<Vec<PostingEntry>>(&v)
+                        .map(|v| v.len())
+                        .unwrap_or(0);
+                    terms.push((term.to_string(), df));
+                }
+            }
+        }
+        terms.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        Ok(terms
+            .into_iter()
+            .take(limit.max(1))
+            .map(|(t, _)| t)
+            .collect())
+    }
 }

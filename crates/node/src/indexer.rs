@@ -5,8 +5,8 @@
 //! 这样上层（爬虫、检索）只依赖 `Arc<dyn Indexer>`，与具体实现解耦。
 
 use axum::{
-    extract::State,
-    routing::post,
+    extract::{Query, State},
+    routing::{get, post},
     Json, Router,
 };
 use nekosearch_core::{
@@ -20,6 +20,7 @@ pub async fn serve(addr: &str, idx: Arc<dyn Indexer>) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/docs", post(add_doc))
         .route("/search", post(search))
+        .route("/suggest", get(suggest))
         .with_state(idx);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -43,4 +44,18 @@ async fn search(
     Json(q): Json<SearchQuery>,
 ) -> Json<Vec<SearchResult>> {
     Json(idx.search(&q).await.unwrap_or_default())
+}
+
+#[derive(serde::Deserialize)]
+struct SuggestParams {
+    q: String,
+    limit: Option<usize>,
+}
+
+/// JSON 查询词自动补全接口。
+async fn suggest(
+    State(idx): State<Arc<dyn Indexer>>,
+    Query(params): Query<SuggestParams>,
+) -> Json<Vec<String>> {
+    Json(idx.suggest(&params.q, params.limit.unwrap_or(10)).await.unwrap_or_default())
 }

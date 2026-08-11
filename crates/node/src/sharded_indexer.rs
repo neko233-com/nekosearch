@@ -99,4 +99,35 @@ impl Indexer for ShardedIndexer {
         all.truncate(query.top_k.max(1));
         Ok(all)
     }
+
+    async fn suggest(&self, prefix: &str, limit: usize) -> Result<Vec<String>> {
+        let mut merged: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for shard in &self.shards {
+            // 每个分片查询第一个（主）副本的 /suggest。
+            let replica = &shard[0];
+            let url = format!("{replica}/suggest");
+            match self
+                .client
+                .get(&url)
+                .query(&[("q", prefix), ("limit", &limit.max(1).to_string())])
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    if let Ok(list) = resp.json::<Vec<String>>().await {
+                        for t in list {
+                            *merged.entry(t).or_insert(0) += 1;
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("分片 {replica} suggest 失败: {e}");
+                }
+            }
+        }
+        let mut out: Vec<String> = merged.into_keys().collect();
+        out.sort();
+        out.truncate(limit.max(1));
+        Ok(out)
+    }
 }

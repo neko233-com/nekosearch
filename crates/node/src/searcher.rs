@@ -25,6 +25,7 @@ pub async fn serve(addr: &str, indexer: Arc<dyn Indexer>) -> anyhow::Result<()> 
     let app = Router::new()
         .route("/", get(home))
         .route("/search", get(search))
+        .route("/suggest", get(suggest))
         .route("/docs", post(add_doc))
         .route("/robots.txt", get(robots))
         .with_state(indexer);
@@ -46,6 +47,12 @@ struct SearchParams {
     top_k: Option<usize>,
 }
 
+#[derive(serde::Deserialize)]
+struct SuggestParams {
+    q: String,
+    limit: Option<usize>,
+}
+
 /// JSON 检索接口。
 async fn search(
     State(indexer): State<Arc<dyn Indexer>>,
@@ -56,6 +63,14 @@ async fn search(
         top_k: params.top_k.unwrap_or(10),
     };
     Json(indexer.search(&q).await.unwrap_or_default())
+}
+
+/// JSON 查询词自动补全接口。
+async fn suggest(
+    State(indexer): State<Arc<dyn Indexer>>,
+    Query(params): Query<SuggestParams>,
+) -> Json<Vec<String>> {
+    Json(indexer.suggest(&params.q, params.limit.unwrap_or(10)).await.unwrap_or_default())
 }
 
 /// 写入文档：对外端口 7800 也能直接索引内容（与索引节点 7900 的 `/docs` 行为一致）。
