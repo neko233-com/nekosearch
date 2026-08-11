@@ -1,0 +1,15 @@
+# 傻瓜式单机部署：一条命令起一个完整搜索引擎
+# 集群模式请复制本文件，把 command 改为各自 --role 并用 depends_on 串联。
+services:
+  nekosearch:
+    build: .
+    image: nekosearch:latest
+    container_name: nekosearch
+    env_file:
+      - .env
+    ports:
+      - "7700:7700"   # 注册中心
+      - "7800:7800"   # 检索服务 (对外查询)
+      - "7900:7900"   # 索引节点
+    command: ["--role", "all"]
+    restart: unless-stopped

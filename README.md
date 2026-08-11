@@ -1,0 +1,76 @@
+# nekosearch
+
+> 对标 Google 的自建搜索服务器。**默认单机部署，架构天生集群，注册中心统一管理爬虫执行器，支持水平扩容。**
+
+用 Rust 编写，单二进制 `nekosearch` 通过 `--role` 切换形态：不传参数即为**单机全角色**，一个进程跑完抓取→索引→检索；也可拆分为 `registry` / `crawler` / `indexer` / `searcher` 多个进程组成集群。注册中心内置、零外部服务依赖。
+
+## 一分钟跑起来（傻瓜式）
+
+```bash
+./deploy.sh
+```
+
+`deploy.sh` 会自动检测：有 docker 就 `docker compose up -d --build`，没有就用 `cargo run --release`（需本机装了 Rust）。
+
+起来后检索：
+
+```bash
+curl "http://localhost:7800/search?q=rust&top_k=10"
+```
+
+查看注册中心里的节点：
+
+```bash
+curl "http://localhost:7700/nodes"
+```
+
+## 手动方式
+
+### 用 Docker
+```bash
+docker compose up -d --build
+```
+
+### 用 Cargo（单机全角色）
+```bash
+cargo run -- --role all --seeds https://www.rust-lang.org/ --max-depth 2
+```
+
+### 集群模式（拆角色，水平扩容爬虫）
+开多个终端，分别跑：
+```bash
+nekosearch --role registry                         # 注册中心 :7700
+nekosearch --role indexer                          # 索引节点 :7900
+nekosearch --role searcher                         # 检索服务 :7800
+nekosearch --role crawler --seeds https://example.com/   # 爬虫，可开 N 个
+```
+新增 `crawler` 进程即可直接提升抓取吞吐——注册中心会自动发现并分配任务。
+
+## 配置项（环境变量 / CLI 等价）
+见 `.env.example`。常用：
+- `NEKO_ROLE`：角色，`all`(默认)/registry/crawler/indexer/searcher
+- `REGISTRY_ADDR` / `INDEXER_ADDR` / `SEARCHER_ADDR`：本节点各服务监听地址
+- `REGISTRY_REMOTE` / `INDEXER_REMOTE`：集群模式下连接远端注册中心/索引的基址
+- `SEEDS`：种子 URL（逗号分隔）
+- `MAX_DEPTH`：最大爬取深度
+
+## 架构一览
+```
+种子URL → 注册中心(入队) → 爬虫领取 → 抓取 → 写索引 → 外链回灌(BFS) → 检索服务查询索引
+```
+- **注册中心**：节点发现 + 抓取任务调度，失联自动剔除。
+- **爬虫执行器**：实现 `CrawlerExecutor` trait；当前内置 http / fs 两个示例，新增数据源只需加一个实现。
+- **索引**：进程内倒排索引（骨架级 TF-IDF），单机/集群共用 `Indexer` trait。
+
+详见 [PLAN.md](./PLAN.md)（架构与路线图）与 [AGENTS.md](./AGENTS.md)（开发规范）。
+
+## 开发
+```bash
+cargo fmt --all
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+> 注意：测试/CI 基线只保留**单机全角色（--role all）**这一种形态（见 AGENTS.md §7）。
+
+## 许可证
+TODO（默认拟采用 MIT/Apache-2.0，待定）。
