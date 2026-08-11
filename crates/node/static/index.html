@@ -3,150 +3,217 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>nekosearch</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234285f4'/%3E%3Ctext x='16' y='23' font-size='20' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3En%3C/text%3E%3C/svg%3E" />
+<title>nekosearch · @neko233</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237c6cff'/%3E%3Cstop offset='1' stop-color='%2329d3c2'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Ctext x='16' y='22' font-size='18' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3En%3C/text%3E%3C/svg%3E" />
 <style>
   :root {
-    --blue: #4285f4;
-    --red: #ea4335;
-    --yellow: #fbbc05;
-    --green: #34a853;
-    --text: #202124;
-    --muted: #5f6368;
-    --url: #006621;
-    --border: #dfe1e5;
+    --bg: #0a0c14;
+    --bg2: #0e111c;
+    --surface: rgba(255,255,255,0.045);
+    --surface-2: rgba(255,255,255,0.07);
+    --border: rgba(255,255,255,0.10);
+    --border-strong: rgba(255,255,255,0.18);
+    --text: #e9ecf4;
+    --muted: #9199b4;
+    --faint: #6b7290;
+    --accent: #7c6cff;
+    --accent2: #29d3c2;
+    --link: #9bb0ff;
+    --url: #4fd1a1;
+    --mark-bg: rgba(124,108,255,0.32);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
-    font-family: Arial, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
     color: var(--text);
-    background: #fff;
+    background: var(--bg);
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
-  a { color: #1a0dab; text-decoration: none; }
+  /* 背景柔光 */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(60vw 60vw at 12% -8%, rgba(124,108,255,0.18), transparent 60%),
+      radial-gradient(55vw 55vw at 100% 0%, rgba(41,211,194,0.12), transparent 55%),
+      linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+  }
+  a { color: var(--link); text-decoration: none; }
   a:hover { text-decoration: underline; }
 
-  /* 通用搜索框 */
-  .searchwrap { display: flex; align-items: center; }
+  /* 顶部导航 */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(10,12,20,0.55);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .avatar {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: grid; place-items: center;
+    font-weight: 800; font-size: 15px; color: #fff;
+    box-shadow: 0 2px 10px rgba(124,108,255,0.35);
+  }
+  .brand .handle { font-weight: 600; font-size: 15px; letter-spacing: .2px; color: var(--text); }
+  .brand .handle:hover { text-decoration: none; color: #fff; }
+  .ghlink {
+    display: inline-flex; align-items: center; gap: 7px;
+    color: var(--muted); font-size: 13.5px; font-weight: 500;
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 6px 13px; transition: border-color .2s, color .2s, background .2s;
+  }
+  .ghlink:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface); text-decoration: none; }
+  .ghlink svg { fill: currentColor; }
+
+  /* 搜索框 */
+  .nav-search { display: flex; align-items: center; }
   .searchbox {
     display: flex; align-items: center;
     width: 100%;
-    max-width: 560px;
     border: 1px solid var(--border);
-    border-radius: 24px;
+    border-radius: 14px;
     padding: 0 14px;
-    height: 44px;
-    background: #fff;
-    transition: box-shadow .2s, border-color .2s;
+    height: 46px;
+    background: var(--surface);
+    transition: border-color .2s, box-shadow .2s, background .2s;
   }
   .searchbox:focus-within {
-    box-shadow: 0 1px 6px rgba(32,33,36,.28);
-    border-color: rgba(223,225,229,0);
+    border-color: transparent;
+    background: var(--surface-2);
+    box-shadow: 0 0 0 2px rgba(124,108,255,0.45), 0 8px 30px rgba(124,108,255,0.18);
   }
   .searchbox svg { flex: 0 0 auto; fill: var(--muted); }
   .searchbox input {
-    flex: 1 1 auto;
-    border: none; outline: none;
-    font-size: 16px;
-    padding: 0 12px;
-    background: transparent;
-    color: var(--text);
+    flex: 1 1 auto; border: none; outline: none;
+    font-size: 16px; padding: 0 12px;
+    background: transparent; color: var(--text);
   }
-  .buttons { margin-top: 26px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .btn {
-    background: #f8f9fa;
-    border: 1px solid #f8f9fa;
-    border-radius: 4px;
-    color: #3c4043;
-    font-size: 14px;
-    padding: 9px 16px;
-    cursor: pointer;
+  .searchbox input::placeholder { color: var(--faint); }
+
+  /* 首页 hero */
+  .hero {
+    display: flex; flex-direction: column; align-items: center;
+    margin-top: 13vh; padding: 0 18px; text-align: center;
   }
-  .btn:hover { border: 1px solid #dadce0; box-shadow: 0 1px 1px rgba(0,0,0,.1); }
-
-  /* Logo */
-  .logo { font-size: 5rem; font-weight: 500; letter-spacing: -2px; user-select: none; }
-  .logo span:nth-child(1){color:var(--blue);}
-  .logo span:nth-child(2){color:var(--red);}
-  .logo span:nth-child(3){color:var(--green);}
-  .logo span:nth-child(4){color:var(--yellow);}
-  .logo span:nth-child(5){color:var(--blue);}
-  .logo span:nth-child(6){color:var(--red);}
-  .logo span:nth-child(7){color:var(--green);}
-  .logo span:nth-child(8){color:var(--yellow);}
-  .logo span:nth-child(9){color:var(--blue);}
-
-  /* 首页 */
-  .hero { display: flex; flex-direction: column; align-items: center; margin-top: 18vh; padding: 0 16px; }
-  .hero .searchwrap { width: 100%; justify-content: center; }
-  .hero .searchbox { max-width: 584px; height: 48px; }
-
-  /* 结果页顶栏 */
-  .topbar {
-    display: none;
-    align-items: center;
-    gap: 24px;
-    padding: 14px 20px;
-    border-bottom: 1px solid #eee;
+  .wordmark {
+    font-size: 4.2rem; font-weight: 800; letter-spacing: -2px; line-height: 1;
+    background: linear-gradient(100deg, var(--accent) 0%, #a78bfa 45%, var(--accent2) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    user-select: none;
   }
-  .topbar .logo { font-size: 1.7rem; letter-spacing: -1px; }
-  .topbar .searchwrap { width: auto; }
-  .topbar .searchbox { max-width: 640px; height: 42px; }
+  .byline {
+    margin-top: 16px; display: inline-flex; align-items: center; gap: 8px;
+    color: var(--muted); font-size: 14px;
+  }
+  .byline a { color: var(--link); }
+  .tagpill {
+    margin-top: 14px; display: inline-flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+  }
+  .tagpill span {
+    font-size: 12px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 11px; background: var(--surface);
+  }
+  .hero .nav-search { width: 100%; margin-top: 30px; }
+  .hero .searchbox { max-width: 600px; height: 52px; margin: 0 auto; font-size: 17px; }
+  .chips { margin-top: 18px; display: flex; gap: 9px; flex-wrap: wrap; justify-content: center; }
+  .chip {
+    font-size: 13px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 6px 13px; cursor: pointer; background: var(--surface);
+    transition: color .2s, border-color .2s;
+  }
+  .chip:hover { color: var(--text); border-color: var(--border-strong); }
 
+  /* 结果页顶栏中的搜索 */
+  .topbar .nav-search { width: auto; flex: 1 1 auto; margin: 0 26px; max-width: 620px; }
   body.results .hero { display: none; }
-  body.results .topbar { display: flex; }
 
   /* 结果列表 */
-  .main { max-width: 680px; padding: 18px 20px 60px; margin-left: 0; }
-  body.results .main { padding-top: 10px; }
-  .stats { color: var(--muted); font-size: 13px; margin: 6px 0 18px; }
+  .main { max-width: 720px; padding: 26px 22px 80px; margin: 0 auto; }
+  .stats { color: var(--muted); font-size: 13px; margin: 4px 0 20px; }
   .result { margin-bottom: 26px; }
-  .result .title { font-size: 20px; line-height: 1.3; }
-  .result .url { color: var(--url); font-size: 13px; margin: 3px 0 4px; word-break: break-all; }
-  .result .snippet { color: #4d5156; font-size: 14px; line-height: 1.58; }
+  .result .title { font-size: 19px; line-height: 1.35; }
+  .result .title a { color: var(--link); }
+  .result .title a:hover { color: #c3d0ff; }
+  .result .url { color: var(--url); font-size: 12.5px; margin: 4px 0 5px; word-break: break-all; }
+  .result .snippet { color: #c4c9da; font-size: 14px; line-height: 1.6; }
   .nores { color: var(--muted); font-size: 15px; }
-  mark { background: #fff2a8; color: inherit; padding: 0 1px; border-radius: 2px; }
-  .footer { color: var(--muted); font-size: 12px; padding: 14px 20px; border-top: 1px solid #eee; }
+  mark { background: var(--mark-bg); color: #fff; padding: 0 2px; border-radius: 3px; }
+
+  .footer {
+    color: var(--faint); font-size: 12.5px; text-align: center;
+    padding: 24px 22px 34px; border-top: 1px solid var(--border);
+  }
+  .footer a { color: var(--muted); }
+  @media (max-width: 560px) {
+    .wordmark { font-size: 3rem; }
+    .topbar .nav-search { margin: 0 12px; }
+  }
 </style>
 </head>
 <body>
-  <!-- 结果页顶栏 -->
-  <div class="topbar">
-    <a href="/" class="logo"><span>n</span><span>e</span><span>k</span><span>o</span><span>s</span><span>e</span><span>a</span><span>r</span><span>c</span><span>h</span></a>
-    <div class="searchwrap">
+  <!-- 顶部导航：@neko233 主标识 + GitHub -->
+  <header class="topbar">
+    <a class="brand" href="https://github.com/neko233-com" target="_blank" rel="noopener">
+      <span class="avatar">n</span>
+      <span class="handle">@neko233</span>
+    </a>
+    <div class="nav-search">
       <form class="searchbox" id="formTop" autocomplete="off">
         <svg width="18" height="18" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
-        <input id="qTop" name="q" type="text" />
+        <input id="qTop" name="q" type="text" placeholder="搜索 nekosearch 索引…" />
       </form>
     </div>
-  </div>
+    <a class="ghlink" href="https://github.com/neko233-com/nekosearch" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </header>
 
-  <!-- 首页 -->
-  <div class="hero">
-    <div class="logo"><span>n</span><span>e</span><span>k</span><span>o</span><span>s</span><span>e</span><span>a</span><span>r</span><span>c</span><span>h</span></div>
-    <div class="searchwrap">
+  <!-- 首页 hero -->
+  <section class="hero">
+    <div class="wordmark">nekosearch</div>
+    <div class="byline">by <a href="https://github.com/neko233-com" target="_blank" rel="noopener">@neko233</a></div>
+    <div class="tagpill">
+      <span>自托管</span>
+      <span>单机起步</span>
+      <span>天生集群</span>
+    </div>
+    <div class="nav-search">
       <form class="searchbox" id="formHome" autocomplete="off">
         <svg width="20" height="20" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
-        <input id="qHome" name="q" type="text" />
+        <input id="qHome" name="q" type="text" placeholder="搜索整个网络索引…" />
       </form>
     </div>
-    <div class="buttons">
-      <button class="btn" id="searchBtn" type="button">搜索</button>
-      <button class="btn" id="luckyBtn" type="button">手气不错</button>
+    <div class="chips">
+      <span class="chip" data-q="rust">rust</span>
+      <span class="chip" data-q="搜索引擎">搜索引擎</span>
+      <span class="chip" data-q="集群">集群</span>
+      <span class="chip" data-q="BM25">BM25</span>
     </div>
-  </div>
+  </section>
 
   <!-- 结果区 -->
-  <div class="main">
+  <main class="main">
     <div class="stats" id="stats"></div>
     <div id="results"></div>
-  </div>
+  </main>
 
-  <div class="footer">nekosearch · 自托管搜索引擎 · 默认单机部署，架构天生支持集群</div>
+  <footer class="footer">
+    @neko233 · <a href="https://github.com/neko233-com/nekosearch" target="_blank" rel="noopener">github.com/neko233-com/nekosearch</a>
+  </footer>
 
 <script>
   const TOP_K = 20;
+  const GH = 'https://github.com/neko233-com/nekosearch';
   const params = new URLSearchParams(location.search);
   const q = params.get('q');
 
@@ -183,7 +250,8 @@
       const terms = termsOf(query);
       if (!Array.isArray(data) || data.length === 0) {
         stats.textContent = '';
-        list.innerHTML = '<div class="nores">未找到与 “' + esc(query) + '” 相关的结果。</div>';
+        list.innerHTML = '<div class="nores">未找到与 “' + esc(query) + '” 相关的结果。' +
+          ' <a href="' + GH + '" target="_blank" rel="noopener">在 GitHub 上提交收录建议 →</a></div>';
         return;
       }
       stats.textContent = '约 ' + data.length + ' 条结果';
@@ -224,19 +292,8 @@
   document.getElementById('formTop').addEventListener('submit', e => {
     e.preventDefault(); doSearch(document.getElementById('qTop').value.trim());
   });
-  document.getElementById('searchBtn').addEventListener('click', () => doSearch(document.getElementById('qHome').value.trim()));
-  document.getElementById('luckyBtn').addEventListener('click', async () => {
-    const query = document.getElementById('qHome').value.trim();
-    if (!query) return;
-    try {
-      const resp = await fetch('/search?q=' + encodeURIComponent(query) + '&top_k=1');
-      const data = await resp.json();
-      if (Array.isArray(data) && data.length && data[0].doc && data[0].doc.url) {
-        location.href = data[0].doc.url;
-        return;
-      }
-    } catch (_) {}
-    doSearch(query);
+  document.querySelectorAll('.chip').forEach(c => {
+    c.addEventListener('click', () => doSearch(c.getAttribute('data-q')));
   });
 
   if (q) { render(q.trim()); }
