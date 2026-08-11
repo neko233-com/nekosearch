@@ -103,6 +103,16 @@ struct Cli {
     peers: Option<Vec<String>>,
 }
 
+/// 把监听地址转换为对外可达的 advertise 标识：监听在 `0.0.0.0` 时视为本机回环地址。
+fn advertise_addr(addr: &str) -> String {
+    let a = if let Some(rest) = addr.strip_prefix("0.0.0.0") {
+        format!("127.0.0.1{rest}")
+    } else {
+        addr.to_string()
+    };
+    format!("http://{a}")
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
@@ -156,7 +166,11 @@ async fn main() -> anyhow::Result<()> {
 
     // 本节点若承担 registry 角色，则启动进程内实现；否则使用远端 HTTP 客户端。
     let inmem_registry = if run_registry {
-        Some(InMemoryRegistry::new())
+        // self_id 用对外可达地址（0.0.0.0 视为本机回环），供多注册中心选主互相识别。
+        Some(InMemoryRegistry::new_with_ha(
+            advertise_addr(&cfg.registry_addr),
+            cfg.peers.clone(),
+        ))
     } else {
         None
     };
@@ -211,6 +225,11 @@ async fn main() -> anyhow::Result<()> {
                 sweep.sweep_stale(10_000).await;
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
+        });
+        // 多注册中心 HA：心跳 + 选主循环（无 peers 时仅维持自身为 leader，无害）。
+        let ha = reg.clone();
+        tokio::spawn(async move {
+            registry::run_ha_loop(ha).await;
         });
     }
 

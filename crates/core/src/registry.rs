@@ -43,23 +43,96 @@ struct RegistryState {
     queue: VecDeque<CrawlTask>,
 }
 
+/// 多注册中心高可用状态（零外部依赖，基于心跳租约的 leader 选举）。
+struct HaState {
+    /// 本节点对外可达的标识（即 advertise URL，例如 http://127.0.0.1:7700）。
+    self_id: String,
+    /// 配置的对端注册中心地址列表。
+    peers: Vec<String>,
+    /// 对端视图：peer_addr -> (peer 的 self_id, 最近一次心跳可见的 Unix 毫秒)。
+    peer_view: HashMap<String, (String, i64)>,
+    /// 当前 leader 的 self_id（启动时假定为自己，运行期由选主刷新）。
+    leader: String,
+}
+
 /// 单机/进程内注册中心实现，基于 `tokio::RwLock` 保护的内存状态。
 ///
 /// 该类型自身是 `Clone`（内部为 `Arc`），可作为 axum 的 `State` 在 HTTP 服务间共享，
-/// 也可直接作为进程内 trait 对象交给爬虫管理器使用。
+/// 也可直接作为进程内 trait 对象交给爬虫管理器使用。多注册中心高可用（Phase 5）通过
+/// [`InMemoryRegistry::new_with_ha`] 注入 `self_id`/`peers`，并由 node 侧心跳循环驱动选主。
 #[derive(Clone)]
 pub struct InMemoryRegistry {
     inner: Arc<tokio::sync::RwLock<RegistryState>>,
+    ha: Arc<tokio::sync::RwLock<HaState>>,
 }
 
 impl InMemoryRegistry {
     pub fn new() -> Self {
+        Self::new_with_ha("local".to_string(), Vec::new())
+    }
+
+    /// 构造带 HA 信息的注册中心。`self_id` 为本节点可达标识，`peers` 为对端地址。
+    /// `peers` 为空时本节点即为唯一 leader（单机/无 HA 场景，行为与 `new()` 一致）。
+    pub fn new_with_ha(self_id: String, peers: Vec<String>) -> Self {
+        let leader = self_id.clone();
         Self {
             inner: Arc::new(tokio::sync::RwLock::new(RegistryState {
                 nodes: HashMap::new(),
                 queue: VecDeque::new(),
             })),
+            ha: Arc::new(tokio::sync::RwLock::new(HaState {
+                self_id,
+                peers,
+                peer_view: HashMap::new(),
+                leader,
+            })),
         }
+    }
+
+    /// 本节点的 HA 标识。
+    pub async fn self_id(&self) -> String {
+        self.ha.read().await.self_id.clone()
+    }
+
+    /// 对端地址列表（供 HA 心跳循环使用）。
+    pub async fn ha_peers(&self) -> Vec<String> {
+        self.ha.read().await.peers.clone()
+    }
+
+    /// 记录某对端在线及其 self_id（HA 心跳循环调用）。
+    pub async fn observe_peer(&self, addr: &str, id: &str) {
+        let mut h = self.ha.write().await;
+        h.peer_view.insert(addr.to_string(), (id.to_string(), now_millis()));
+    }
+
+    /// 剔除超过 `ttl_ms` 未心跳的对端。
+    pub async fn drop_stale_peers(&self, ttl_ms: i64) {
+        let mut h = self.ha.write().await;
+        let cutoff = now_millis() - ttl_ms;
+        h.peer_view.retain(|_, (_, seen)| *seen >= cutoff);
+    }
+
+    /// 重新计算 leader：在 {本节点} ∪ {在线对端 id} 中取字典序最小者（稳定、确定性）。
+    pub async fn recompute_leader(&self) {
+        let mut h = self.ha.write().await;
+        let mut candidate = h.self_id.clone();
+        for (id, _) in h.peer_view.values() {
+            if id < &candidate {
+                candidate = id.clone();
+            }
+        }
+        h.leader = candidate;
+    }
+
+    /// 本节点是否为当前 leader。
+    pub async fn is_leader(&self) -> bool {
+        let h = self.ha.read().await;
+        h.leader == h.self_id
+    }
+
+    /// 当前 leader 的标识（即可直接用于重定向的地址）。
+    pub async fn leader(&self) -> String {
+        self.ha.read().await.leader.clone()
     }
 
     /// 剔除超过 `ttl_ms` 未心跳的节点。由注册中心 HTTP 服务周期性调用。
