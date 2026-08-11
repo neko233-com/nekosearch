@@ -6,21 +6,21 @@
 //!   通过 HTTP 注册中心互相发现与协作，可水平扩容。
 //!
 //! 关键抽象：无论单机还是集群，爬虫管理器只依赖 `Arc<dyn Registry>` 与 `Arc<dyn Indexer>`，
-//! 由 `main` 在启动时按形态装配（内存实现 vs HTTP 客户端），上层逻辑完全一致。
+//! 由 `main` 在启动时按形态装配（内存/持久化实现 vs HTTP 客户端），上层逻辑完全一致。
+//!
+//! 配置以 `config.yaml` 为主（见 `config.yaml.example`），命令行参数与环境变量优先。
 
+mod config;
 mod crawler;
 mod indexer;
 mod indexer_client;
+mod persistent_indexer;
 mod registry;
 mod registry_client;
 mod searcher;
 
 use clap::{Parser, ValueEnum};
-use nekosearch_core::{
-    indexer::{InMemoryIndexer, Indexer},
-    registry::{InMemoryRegistry, Registry},
-    Role,
-};
+use nekosearch_core::{indexer::Indexer, registry::{InMemoryRegistry, Registry}, Role};
 use std::sync::Arc;
 
 /// 命令行选定的角色。映射到底层 [`Role`] 协议枚举。
@@ -33,14 +33,15 @@ enum RoleArg {
     Searcher,
 }
 
-impl From<RoleArg> for Role {
-    fn from(r: RoleArg) -> Role {
-        match r {
-            RoleArg::All => Role::All,
-            RoleArg::Registry => Role::Registry,
-            RoleArg::Crawler => Role::Crawler,
-            RoleArg::Indexer => Role::Indexer,
-            RoleArg::Searcher => Role::Searcher,
+impl RoleArg {
+    /// 角色对应的字符串表示（用于覆盖 YAML 配置中的 `role` 字段）。
+    fn as_str(self) -> &'static str {
+        match self {
+            RoleArg::All => "all",
+            RoleArg::Registry => "registry",
+            RoleArg::Crawler => "crawler",
+            RoleArg::Indexer => "indexer",
+            RoleArg::Searcher => "searcher",
         }
     }
 }
@@ -52,37 +53,45 @@ impl From<RoleArg> for Role {
     about = "Self-hosted search server — single-node by default, cluster-ready"
 )]
 struct Cli {
+    /// 配置文件路径（YAML）。命令行参数优先级高于本文件。
+    #[arg(long, default_value = "config.yaml")]
+    config: String,
+
     /// 节点角色。`all` = 单机全角色；其余为集群独立角色。
-    #[arg(long, value_enum, default_value_t = RoleArg::All, env = "NEKO_ROLE")]
-    role: RoleArg,
+    #[arg(long, value_enum, env = "NEKO_ROLE")]
+    role: Option<RoleArg>,
 
     /// 注册中心 HTTP 监听地址（本节点承担 registry 角色时生效）。
-    #[arg(long, env = "REGISTRY_ADDR", default_value = "0.0.0.0:7700")]
-    registry_addr: String,
+    #[arg(long, env = "REGISTRY_ADDR")]
+    registry_addr: Option<String>,
 
     /// 索引节点 HTTP 监听地址（本节点承担 indexer 角色时生效）。
-    #[arg(long, env = "INDEXER_ADDR", default_value = "0.0.0.0:7900")]
-    indexer_addr: String,
+    #[arg(long, env = "INDEXER_ADDR")]
+    indexer_addr: Option<String>,
 
     /// 检索服务 HTTP 监听地址（本节点承担 searcher 角色时生效）。
-    #[arg(long, env = "SEARCHER_ADDR", default_value = "0.0.0.0:7800")]
-    searcher_addr: String,
+    #[arg(long, env = "SEARCHER_ADDR")]
+    searcher_addr: Option<String>,
 
     /// 远端注册中心基址（集群模式下 crawler/indexer/searcher 连接用）。
-    #[arg(long, env = "REGISTRY_REMOTE", default_value = "http://127.0.0.1:7700")]
-    registry_remote: String,
+    #[arg(long, env = "REGISTRY_REMOTE")]
+    registry_remote: Option<String>,
 
     /// 远端索引节点基址（集群模式下 crawler/searcher 写入/查询用）。
-    #[arg(long, env = "INDEXER_REMOTE", default_value = "http://127.0.0.1:7900")]
-    indexer_remote: String,
+    #[arg(long, env = "INDEXER_REMOTE")]
+    indexer_remote: Option<String>,
 
     /// 爬虫种子 URL，逗号分隔。
-    #[arg(long, env = "SEEDS", value_delimiter = ',', default_value = "")]
-    seeds: Vec<String>,
+    #[arg(long, env = "SEEDS", value_delimiter = ',')]
+    seeds: Option<Vec<String>>,
 
     /// 最大爬取深度（BFS）。
-    #[arg(long, env = "MAX_DEPTH", default_value_t = 2)]
-    max_depth: u32,
+    #[arg(long, env = "MAX_DEPTH")]
+    max_depth: Option<u32>,
+
+    /// 持久化索引数据目录（sled）。
+    #[arg(long, env = "DATA_DIR")]
+    data_dir: Option<String>,
 }
 
 #[tokio::main]
@@ -93,35 +102,69 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    let run_registry = matches!(cli.role, RoleArg::All | RoleArg::Registry);
-    let run_indexer = matches!(cli.role, RoleArg::All | RoleArg::Indexer);
-    let run_crawler = matches!(cli.role, RoleArg::All | RoleArg::Crawler);
-    let run_searcher = matches!(cli.role, RoleArg::All | RoleArg::Searcher);
+    // 加载 YAML 配置，命令行参数（及 clap 环境变量）覆盖配置文件。
+    let mut cfg = config::Config::load(&cli.config).unwrap_or_default();
+    if let Some(r) = cli.role {
+        cfg.role = r.as_str().to_string();
+    }
+    if let Some(a) = cli.registry_addr {
+        cfg.registry_addr = a;
+    }
+    if let Some(a) = cli.indexer_addr {
+        cfg.indexer_addr = a;
+    }
+    if let Some(a) = cli.searcher_addr {
+        cfg.searcher_addr = a;
+    }
+    if let Some(a) = cli.registry_remote {
+        cfg.registry_remote = a;
+    }
+    if let Some(a) = cli.indexer_remote {
+        cfg.indexer_remote = a;
+    }
+    if let Some(s) = cli.seeds {
+        cfg.seeds = s;
+    }
+    if let Some(d) = cli.max_depth {
+        cfg.max_depth = d;
+    }
+    if let Some(p) = cli.data_dir {
+        cfg.data_dir = p;
+    }
 
-    // 本节点若承担 registry/indexer 角色，则启动进程内实现；否则使用远端 HTTP 客户端。
+    let role = config::parse_role(&cfg.role)?;
+
+    let run_registry = matches!(role, Role::All | Role::Registry);
+    let run_indexer = matches!(role, Role::All | Role::Indexer);
+    let run_crawler = matches!(role, Role::All | Role::Crawler);
+    let run_searcher = matches!(role, Role::All | Role::Searcher);
+
+    // 本节点若承担 registry 角色，则启动进程内实现；否则使用远端 HTTP 客户端。
     let inmem_registry = if run_registry {
         Some(InMemoryRegistry::new())
     } else {
         None
     };
-    let inmem_indexer = if run_indexer {
-        Some(InMemoryIndexer::new())
+    // 本节点若承担 indexer 角色，默认使用持久化（sled）实现，重启不丢索引；
+    // 否则使用远端 HTTP 客户端。
+    let sled_indexer = if run_indexer {
+        Some(persistent_indexer::SledIndexer::open_or_create(&cfg.data_dir)?)
     } else {
         None
     };
 
     let registry: Arc<dyn Registry> = match &inmem_registry {
         Some(r) => Arc::new(r.clone()),
-        None => Arc::new(registry_client::HttpRegistryClient::new(cli.registry_remote.clone())),
+        None => Arc::new(registry_client::HttpRegistryClient::new(cfg.registry_remote.clone())),
     };
-    let indexer: Arc<dyn Indexer> = match &inmem_indexer {
+    let indexer: Arc<dyn Indexer> = match &sled_indexer {
         Some(i) => Arc::new(i.clone()),
-        None => Arc::new(indexer_client::HttpIndexerClient::new(cli.indexer_remote.clone())),
+        None => Arc::new(indexer_client::HttpIndexerClient::new(cfg.indexer_remote.clone())),
     };
 
     if let Some(reg) = &inmem_registry {
         let reg_clone = reg.clone();
-        let addr = cli.registry_addr.clone();
+        let addr = cfg.registry_addr.clone();
         tokio::spawn(async move {
             if let Err(e) = registry::serve(&addr, reg_clone).await {
                 tracing::error!("registry server stopped: {e}");
@@ -137,11 +180,11 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
-    if let Some(idx) = &inmem_indexer {
+    if let Some(idx) = &sled_indexer {
         let idx_clone = idx.clone();
-        let addr = cli.indexer_addr.clone();
+        let addr = cfg.indexer_addr.clone();
         tokio::spawn(async move {
-            if let Err(e) = indexer::serve(&addr, idx_clone).await {
+            if let Err(e) = indexer::serve(&addr, Arc::new(idx_clone)).await {
                 tracing::error!("indexer server stopped: {e}");
             }
         });
@@ -149,7 +192,7 @@ async fn main() -> anyhow::Result<()> {
 
     if run_searcher {
         let idx = indexer.clone();
-        let addr = cli.searcher_addr.clone();
+        let addr = cfg.searcher_addr.clone();
         tokio::spawn(async move {
             if let Err(e) = searcher::serve(&addr, idx).await {
                 tracing::error!("searcher server stopped: {e}");
@@ -158,18 +201,19 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if run_crawler {
-        let seeds: Vec<String> = cli.seeds.iter().filter(|s| !s.is_empty()).cloned().collect();
+        let seeds: Vec<String> = cfg.seeds.iter().filter(|s| !s.is_empty()).cloned().collect();
         let manager = Arc::new(crawler::manager::CrawlerManager::new(
             registry.clone(),
             indexer.clone(),
             seeds,
-            cli.max_depth,
+            cfg.max_depth,
         ));
         tokio::spawn(manager.run());
     }
 
     tracing::info!(
-        role = ?cli.role,
+        role = ?role,
+        data_dir = %cfg.data_dir,
         "nekosearch started (single-node default; cluster roles enabled by --role)"
     );
 

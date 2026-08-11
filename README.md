@@ -7,10 +7,14 @@
 ## 一分钟跑起来（傻瓜式）
 
 ```bash
+# Linux / macOS
 ./deploy.sh
+
+# Windows (PowerShell)
+.\deploy.ps1
 ```
 
-`deploy.sh` 会自动检测：有 docker 就 `docker compose up -d --build`，没有就用 `cargo run --release`（需本机装了 Rust）。
+`deploy.sh` / `deploy.ps1` 会自动检测：有 docker 就 `docker compose up -d --build`，没有就用 `cargo run --release`（需本机装了 Rust）。
 
 起来后检索：
 
@@ -46,13 +50,14 @@ nekosearch --role crawler --seeds https://example.com/   # 爬虫，可开 N 个
 ```
 新增 `crawler` 进程即可直接提升抓取吞吐——注册中心会自动发现并分配任务。
 
-## 配置项（环境变量 / CLI 等价）
-见 `.env.example`。常用：
-- `NEKO_ROLE`：角色，`all`(默认)/registry/crawler/indexer/searcher
-- `REGISTRY_ADDR` / `INDEXER_ADDR` / `SEARCHER_ADDR`：本节点各服务监听地址
-- `REGISTRY_REMOTE` / `INDEXER_REMOTE`：集群模式下连接远端注册中心/索引的基址
-- `SEEDS`：种子 URL（逗号分隔）
-- `MAX_DEPTH`：最大爬取深度
+## 配置项（YAML / CLI / 环境变量）
+配置以 `config.yaml` 为主（参考 `config.yaml.example`）。CLI 参数与兼容的环境变量优先级更高。常用项：
+- `role` / `--role` / `NEKO_ROLE`：角色，`all`(默认)/registry/crawler/indexer/searcher
+- `registry_addr` / `indexer_addr` / `searcher_addr`：本节点各服务监听地址
+- `registry_remote` / `indexer_remote`：集群模式下连接远端注册中心/索引的基址
+- `seeds` / `--seeds` / `SEEDS`：种子 URL（YAML 用列表，CLI/环境变量逗号分隔）
+- `max_depth` / `MAX_DEPTH`：最大爬取深度
+- `data_dir` / `DATA_DIR`：持久化索引目录（sled），默认 `./data`
 
 ## 架构一览
 ```

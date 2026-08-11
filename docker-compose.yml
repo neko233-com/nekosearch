@@ -5,11 +5,17 @@ services:
     build: .
     image: nekosearch:latest
     container_name: nekosearch
-    env_file:
-      - .env
     ports:
       - "7700:7700"   # 注册中心
       - "7800:7800"   # 检索服务 (对外查询)
       - "7900:7900"   # 索引节点
+    volumes:
+      # 索引持久化（sled 数据目录），容器重建不丢数据
+      - nekosearch-data:/app/data
+      # 可选：如需覆盖默认配置，取消下一行注释并在宿主机放置 config.yaml
+      # - ./config.yaml:/app/config.yaml:ro
     command: ["--role", "all"]
     restart: unless-stopped
+
+volumes:
+  nekosearch-data:

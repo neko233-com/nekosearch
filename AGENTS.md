@@ -9,14 +9,14 @@ nekosearch 是一个**对标 Google 的自建搜索服务器**。设计上**默�
 - 语言：**Rust（stable，edition 2021）**，禁止引入 nightly-only 特性。
 - 异步：tokio + axum（HTTP）。
 - 序列化：serde / serde_json。
-- CLI：clap（同时支持环境变量，见 `.env.example`）。
+- CLI：clap；配置以 **YAML** 为主（见 `config.yaml.example`），clap 兼容环境变量作为兜底。
 - 外部服务依赖：**默认零依赖**。单机模式不依赖 etcd / Consul / NATS 等任何外部服务；集群模式也仅依赖本进程内的注册中心 HTTP 服务。新增外部依赖须在本文件登记并经评审。
 - 本地需安装 Rust 工具链（`rustup`）。本仓库含 `rust-toolchain.toml` 固定 stable。
 
 ## 3. 目录结构
 ```
 crates/core   # 共享内核：协议/数据结构、Registry trait、Indexer trait、错误类型
-crates/node   # 单二进制 nekosearch：注册中心HTTP、索引HTTP、检索HTTP、爬虫执行器与管理器、CLI
+crates/node   # 单二进制 nekosearch：注册中心HTTP、索引HTTP、检索HTTP、爬虫执行器与管理器、CLI、YAML配置、持久化索引
 ```
 
 ## 4. 架构红线（不可违反）
@@ -59,4 +59,4 @@ curl "http://localhost:7700/nodes"
 3. 跑通单机基线后提 PR，附该数据源的冒烟说明。
 
 ## 10. 傻瓜式部署
-见 `README.md` 与仓库根目录的 `deploy.sh` / `docker-compose.yml`：一行 `./deploy.sh` 或 `docker compose up -d` 即可起一个单机搜索引擎。
+见 `README.md` 与仓库根目录的 `deploy.sh`（Linux/macOS）/ `deploy.ps1`（Windows PowerShell）/ `docker-compose.yml`：一行 `./deploy.sh` 或 `.\deploy.ps1` 或 `docker compose up -d` 即可起一个单机搜索引擎。

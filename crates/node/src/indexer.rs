@@ -1,7 +1,8 @@
 //! 索引节点 HTTP 服务（REST）。
 //!
-//! 仅在节点承担 indexer 角色时启动，底层由 `InMemoryIndexer` 支撑。
-//! 集群中爬虫通过 `HttpIndexerClient` 写入文档，检索服务通过它查询。
+//! 仅在节点承担 indexer 角色时启动。底层由任意 [`Indexer`] 实现支撑：
+//! 单机默认是 `SledIndexer`（持久化），集群中爬虫通过 `HttpIndexerClient` 写入远端索引节点。
+//! 这样上层（爬虫、检索）只依赖 `Arc<dyn Indexer>`，与具体实现解耦。
 
 use axum::{
     extract::State,
@@ -9,12 +10,13 @@ use axum::{
     Json, Router,
 };
 use nekosearch_core::{
-    indexer::{InMemoryIndexer, Indexer},
+    indexer::Indexer,
     Doc, SearchQuery, SearchResult,
 };
+use std::sync::Arc;
 
 /// 启动索引节点 HTTP 服务。
-pub async fn serve(addr: &str, idx: InMemoryIndexer) -> anyhow::Result<()> {
+pub async fn serve(addr: &str, idx: Arc<dyn Indexer>) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/docs", post(add_doc))
         .route("/search", post(search))
@@ -26,7 +28,10 @@ pub async fn serve(addr: &str, idx: InMemoryIndexer) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn add_doc(State(idx): State<InMemoryIndexer>, Json(doc): Json<Doc>) -> axum::http::StatusCode {
+async fn add_doc(
+    State(idx): State<Arc<dyn Indexer>>,
+    Json(doc): Json<Doc>,
+) -> axum::http::StatusCode {
     match idx.add(doc).await {
         Ok(()) => axum::http::StatusCode::OK,
         Err(_) => axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -34,7 +39,7 @@ async fn add_doc(State(idx): State<InMemoryIndexer>, Json(doc): Json<Doc>) -> ax
 }
 
 async fn search(
-    State(idx): State<InMemoryIndexer>,
+    State(idx): State<Arc<dyn Indexer>>,
     Json(q): Json<SearchQuery>,
 ) -> Json<Vec<SearchResult>> {
     Json(idx.search(&q).await.unwrap_or_default())

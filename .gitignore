@@ -11,3 +11,7 @@
 
 # OS
 .DS_Store
+
+# 用户本地配置与索引数据（勿提交）
+/config.yaml
+/data

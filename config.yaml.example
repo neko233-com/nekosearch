@@ -1,0 +1,24 @@
+# nekosearch 配置文件（YAML）。复制为 config.yaml 后按需修改。
+# 命令行参数（及兼容的环境变量）优先级高于本文件。
+
+# 节点角色：all(默认, 单机全角色) / registry / crawler / indexer / searcher
+role: all
+
+# 本节点各服务监听地址
+registry_addr: "0.0.0.0:7700"
+indexer_addr: "0.0.0.0:7900"
+searcher_addr: "0.0.0.0:7800"
+
+# 集群模式下连接远端注册中心 / 索引节点的基址
+registry_remote: "http://127.0.0.1:7700"
+indexer_remote: "http://127.0.0.1:7900"
+
+# 爬虫种子 URL（列表形式，可多个）
+seeds:
+  - "https://www.rust-lang.org/"
+
+# 最大爬取深度（BFS）
+max_depth: 2
+
+# 持久化索引数据目录（sled）。重启不丢数据。
+data_dir: "./data"

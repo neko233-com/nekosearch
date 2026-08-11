@@ -58,17 +58,19 @@
 - Rust stable + tokio + axum（HTTP 服务）。
 - 注册中心 / 索引：进程内内存实现，零外部服务（etcd/Consul/NATS 不在默认链路）。
 - 检索评分：简化 TF-IDF 骨架；生产替换为 Tantivy / Meilisearch 等。
-- 部署：Docker 多阶段构建 + docker-compose 一键起；`deploy.sh` 自动识别 docker/cargo。
+- 部署：Docker 多阶段构建 + docker-compose 一键起；`deploy.sh`（Linux/macOS）与 `deploy.ps1`（Windows）自动识别 docker/cargo。
+- 配置：YAML（`config.yaml`，参考 `config.yaml.example`），CLI/环境变量可覆盖。
+- 持久化：默认单机使用 sled（纯 Rust 嵌入式 KV，零外部依赖）保存倒排索引，重启不丢数据。
 
 ## 7. 傻瓜式部署
-- `./deploy.sh`：检测到 docker 则 `docker compose up -d --build`，否则 `cargo run --release`（单机 all）。
-- `docker-compose.yml`：单服务、三端口映射、`restart: unless-stopped`。
-- `.env.example`：所有可配项（角色、地址、种子、深度），经 clap `env` 注入。
+- `./deploy.sh`（Linux/macOS）/ `.\deploy.ps1`（Windows）：检测到 docker 则 `docker compose up -d --build`，否则 `cargo run --release`（单机 all）。
+- `docker-compose.yml`：单服务、三端口映射、`restart: unless-stopped`，挂载 `nekosearch-data` 卷持久化索引。
+- `config.yaml.example`：所有可配项（角色、地址、种子、深度、data_dir），YAML 格式，经 `config.yaml` 加载。
 - 起好后：`curl "http://localhost:7800/search?q=关键词"` 即可检索。
 
 ## 8. 里程碑 / 路线图
 - [x] **阶段 0（当前骨架）**：Cargo workspace、注册中心 trait+内存实现+HTTP、索引 trait+内存实现+HTTP、检索 API、爬虫执行器 trait + http/fs 示例、CLI 多角色、傻瓜式部署、AGENTS/PLAN。
-- [ ] **阶段 1**：持久化索引（RocksDB / Tantivy），进程重启不丢数据。
+- [x] **阶段 1**：持久化索引（sled 嵌入式 KV，零外部依赖），进程重启不丢数据；并接入 YAML 配置、新增 `deploy.ps1` 一键安装。
 - [ ] **阶段 2**：中文分词（jieba）与更优排序（BM25 + 向量）。
 - [ ] **阶段 3**：索引分片与多副本（注册中心管理 indexer 集群），真正水平扩展检索容量。
 - [ ] **阶段 4**：检索前端 UI、查询词建议、站点地图/robots 合规抓取。

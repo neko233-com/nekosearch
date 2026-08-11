@@ -22,7 +22,9 @@ pub trait Indexer: Send + Sync {
 ///
 /// 注意：这是骨架级分词器，中文需要后续接入专用分词（如 jieba）才能有好的召回。
 /// 该函数在 `add` 与 `search` 中保持一致即可保证索引/查询对齐。
-fn tokenize(text: &str) -> Vec<String> {
+///
+/// 标记为 `pub` 以便持久化索引实现（如 `SledIndexer`）复用同一套分词，保证索引/查询对齐。
+pub fn tokenize(text: &str) -> Vec<String> {
     text.to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
         .filter(|t| t.len() > 1)
